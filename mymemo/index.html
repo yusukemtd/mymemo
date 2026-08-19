@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mymemo</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="tabbar"></div>
+      <div id="editor-container"></div>
+      <div id="grep-panel" class="hidden">
+        <div id="grep-form">
+          <button id="grep-dir-btn" title="検索フォルダを選択">📁</button>
+          <span id="grep-dir-label">フォルダ未選択</span>
+          <input id="grep-input" type="text" placeholder="検索パターン" />
+          <label><input id="grep-regex" type="checkbox" checked />正規表現</label>
+          <label><input id="grep-case" type="checkbox" />大文字小文字</label>
+          <button id="grep-run">検索</button>
+          <span id="grep-status"></span>
+          <button id="grep-close" title="閉じる">✕</button>
+        </div>
+        <div id="grep-results"></div>
+      </div>
+      <div id="statusbar">
+        <span id="status-pos"></span>
+        <span class="status-spacer"></span>
+        <span id="status-encoding"></span>
+        <span id="status-eol"></span>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
