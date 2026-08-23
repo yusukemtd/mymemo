@@ -1,0 +1,240 @@
+/* テーマ用カラートークン定義。
+   :root がダーク(既定)。他テーマは html[data-theme="..."] で上書きする。
+   テーマを追加するときはこのファイルにブロックを1つ足し、
+   src/theme.js の THEMES と src-tauri/src/lib.rs の theme_defs に1行ずつ追加する。
+   各ブロックは --syn-* (シンタックスハイライト) の全トークンも定義すること。 */
+
+:root {
+  color-scheme: dark;
+
+  /* 背景 */
+  --bg-base: #1e1e1e;          /* アプリ/エディタ/アクティブタブ */
+  --bg-surface: #2a2a2a;       /* タブバー/ステータスバー/検索パネル */
+  --bg-panel: #232323;         /* grep パネル */
+  --bg-inset: #1a1a1a;         /* テキスト入力欄 */
+  --bg-element: #3a3a3a;       /* ボタン */
+  --bg-element-hover: #4a4a4a;
+  --bg-hover: #333333;         /* grep 行 hover */
+  --bg-hover-strong: #444444;  /* タブ ✕ hover */
+
+  /* 文字 */
+  --fg-primary: #dddddd;
+  --fg-strong: #eeeeee;        /* アクティブタブ */
+  --fg-max: #ffffff;           /* + ボタン hover */
+  --fg-secondary: #aaaaaa;     /* チェックボックスラベル */
+  --fg-muted: #999999;         /* 非アクティブタブ/ステータスバー */
+  --fg-faint: #888888;         /* + ボタン/grep ステータス */
+  --fg-dim: #777777;           /* grep 行番号 */
+
+  /* 境界線 */
+  --border-strong: #4d4d4d;
+  --border-mid: #454545;
+  --border-input: #3a3a3a;
+
+  /* アクセント */
+  --accent: #5a8dd6;           /* アクティブタブ上線/フォーカス枠 */
+  --accent-text: #8ab4f8;      /* grep フォルダラベル */
+  --accent-text-strong: #9ec3ff; /* grep ファイル見出し文字 */
+  --accent-surface: #333842;   /* grep ファイル見出し背景 */
+  --warning: #e8b750;          /* dirty ドット ● */
+
+  /* エディタ(CodeMirror) */
+  --ed-gutter-fg: #666666;
+  --ed-activeline: #ffffff0a;
+  --ed-selection: #3a5a8c88;
+  --ed-cursor: #ffffff;
+  --ed-search-match: #e8b75033;
+  --ed-search-match-selected: #e8b75077;
+  --ed-selection-match: #99ff7780;
+  --ed-matching-bracket: #328c8252;
+  --ed-jump-line: rgba(232, 183, 80, 0.35);
+
+  /* シンタックスハイライト */
+  --syn-keyword: #c586c0;
+  --syn-string: #ce9178;
+  --syn-comment: #6a9955;
+  --syn-number: #b5cea8;
+  --syn-function: #dcdcaa;
+  --syn-variable: #9cdcfe;
+  --syn-type: #4ec9b0;
+  --syn-operator: #d4d4d4;
+  --syn-property: #9cdcfe;
+  --syn-constant: #569cd6;
+  --syn-meta: #969696;
+  --syn-regexp: #d16969;
+  --syn-heading: #8ab4f8;   /* --accent-text と揃える */
+  --syn-invalid: #f44747;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-base: #ffffff;
+  --bg-surface: #f1f1f1;
+  --bg-panel: #f7f7f7;
+  --bg-inset: #ffffff;
+  --bg-element: #e4e4e4;
+  --bg-element-hover: #d6d6d6;
+  --bg-hover: #ececec;
+  --bg-hover-strong: #d0d0d0;
+
+  --fg-primary: #333333;
+  --fg-strong: #111111;
+  --fg-max: #000000;
+  --fg-secondary: #555555;
+  --fg-muted: #777777;
+  --fg-faint: #888888;
+  --fg-dim: #999999;
+
+  --border-strong: #c8c8c8;
+  --border-mid: #d4d4d4;
+  --border-input: #bbbbbb;
+
+  --accent: #3b73c9;
+  --accent-text: #1a5fb4;
+  --accent-text-strong: #174a9e;
+  --accent-surface: #e4edf9;
+  --warning: #b8860b;
+
+  --ed-gutter-fg: #a0a0a0;
+  --ed-activeline: #00000008;
+  --ed-selection: #b3d4fc99;
+  --ed-cursor: #000000;
+  --ed-search-match: #e8b75055;
+  --ed-search-match-selected: #e8b750aa;
+  --ed-selection-match: #99dd9977;
+  --ed-matching-bracket: #2e8c8240;
+  --ed-jump-line: rgba(212, 158, 40, 0.35);
+
+  /* シンタックスハイライト */
+  --syn-keyword: #af00db;
+  --syn-string: #a31515;
+  --syn-comment: #008000;
+  --syn-number: #098658;
+  --syn-function: #795e26;
+  --syn-variable: #001080;
+  --syn-type: #267f99;
+  --syn-operator: #333333;
+  --syn-property: #001080;
+  --syn-constant: #0000ff;
+  --syn-meta: #808080;
+  --syn-regexp: #811f3f;
+  --syn-heading: #1a5fb4;   /* --accent-text と揃える */
+  --syn-invalid: #cd3131;
+}
+
+/* Solarized (https://ethanschoonover.com/solarized/)
+   UI コントロール色(ボタン面・境界線等)は公式パレットにないため base02/base2 からの派生値 */
+html[data-theme="solarized-dark"] {
+  color-scheme: dark;
+
+  --bg-base: #002b36;          /* base03 */
+  --bg-surface: #073642;       /* base02 */
+  --bg-panel: #04313c;
+  --bg-inset: #00252e;
+  --bg-element: #0d4a59;
+  --bg-element-hover: #135767;
+  --bg-hover: #0a4150;
+  --bg-hover-strong: #10505f;
+
+  --fg-primary: #93a1a1;       /* base1 */
+  --fg-strong: #eee8d5;        /* base2 */
+  --fg-max: #fdf6e3;           /* base3 */
+  --fg-secondary: #839496;     /* base0 */
+  --fg-muted: #657b83;         /* base00 */
+  --fg-faint: #586e75;         /* base01 */
+  --fg-dim: #52676f;
+
+  --border-strong: #144c5a;
+  --border-mid: #0f4350;
+  --border-input: #0e4756;
+
+  --accent: #268bd2;           /* blue */
+  --accent-text: #3f9bdb;
+  --accent-text-strong: #7fbde4;
+  --accent-surface: #0b3d4c;
+  --warning: #b58900;          /* yellow */
+
+  --ed-gutter-fg: #586e75;     /* base01 */
+  --ed-activeline: #eee8d50d;
+  --ed-selection: #268bd240;
+  --ed-cursor: #93a1a1;
+  --ed-search-match: #b5890033;
+  --ed-search-match-selected: #b5890077;
+  --ed-selection-match: #85990040; /* green */
+  --ed-matching-bracket: #2aa19855; /* cyan */
+  --ed-jump-line: rgba(181, 137, 0, 0.35);
+
+  /* シンタックスハイライト(公式 Solarized アクセント) */
+  --syn-keyword: #859900;   /* green */
+  --syn-string: #2aa198;    /* cyan */
+  --syn-comment: #586e75;   /* base01 */
+  --syn-number: #2aa198;    /* cyan */
+  --syn-function: #268bd2;  /* blue */
+  --syn-variable: #93a1a1;  /* base1 = 本文色 */
+  --syn-type: #b58900;      /* yellow */
+  --syn-operator: #839496;  /* base0 */
+  --syn-property: #268bd2;  /* blue */
+  --syn-constant: #cb4b16;  /* orange */
+  --syn-meta: #cb4b16;      /* orange (shebang) */
+  --syn-regexp: #dc322f;    /* red */
+  --syn-heading: #268bd2;   /* blue */
+  --syn-invalid: #dc322f;   /* red */
+}
+
+html[data-theme="solarized-light"] {
+  color-scheme: light;
+
+  --bg-base: #fdf6e3;          /* base3 */
+  --bg-surface: #eee8d5;       /* base2 */
+  --bg-panel: #f6efdc;
+  --bg-inset: #fdf6e3;
+  --bg-element: #e0d8c2;
+  --bg-element-hover: #d5cdb6;
+  --bg-hover: #ece5d0;
+  --bg-hover-strong: #d5cdb6;
+
+  --fg-primary: #657b83;       /* base00 */
+  --fg-strong: #073642;        /* base02 */
+  --fg-max: #002b36;           /* base03 */
+  --fg-secondary: #839496;     /* base0 */
+  --fg-muted: #93a1a1;         /* base1 */
+  --fg-faint: #93a1a1;
+  --fg-dim: #93a1a1;
+
+  --border-strong: #d4cbb2;
+  --border-mid: #ddd4bd;
+  --border-input: #c8bfa5;
+
+  --accent: #268bd2;           /* blue */
+  --accent-text: #1e6fa8;
+  --accent-text-strong: #175a8a;
+  --accent-surface: #dfe8ec;
+  --warning: #b58900;          /* yellow */
+
+  --ed-gutter-fg: #93a1a1;     /* base1 */
+  --ed-activeline: #002b3608;
+  --ed-selection: #268bd230;
+  --ed-cursor: #002b36;
+  --ed-search-match: #b5890040;
+  --ed-search-match-selected: #b5890085;
+  --ed-selection-match: #85990035; /* green */
+  --ed-matching-bracket: #2aa19845; /* cyan */
+  --ed-jump-line: rgba(181, 137, 0, 0.3);
+
+  /* シンタックスハイライト(公式 Solarized アクセント。ベーストーン系のみ dark と反転) */
+  --syn-keyword: #859900;   /* green */
+  --syn-string: #2aa198;    /* cyan */
+  --syn-comment: #93a1a1;   /* base1 */
+  --syn-number: #2aa198;    /* cyan */
+  --syn-function: #268bd2;  /* blue */
+  --syn-variable: #657b83;  /* base00 = 本文色 */
+  --syn-type: #b58900;      /* yellow */
+  --syn-operator: #586e75;  /* base01 */
+  --syn-property: #268bd2;  /* blue */
+  --syn-constant: #cb4b16;  /* orange */
+  --syn-meta: #cb4b16;      /* orange (shebang) */
+  --syn-regexp: #dc322f;    /* red */
+  --syn-heading: #268bd2;   /* blue */
+  --syn-invalid: #dc322f;   /* red */
+}

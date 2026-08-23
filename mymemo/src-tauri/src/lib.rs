@@ -3,9 +3,40 @@ mod file_io;
 mod grep;
 
 use tauri::menu::{
-    AboutMetadataBuilder, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder,
+    AboutMetadataBuilder, CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder,
+    PredefinedMenuItem, SubmenuBuilder,
 };
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
+
+// 最後のタブを閉じたときにフロントエンドから呼ばれる
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+// 「表示 > テーマ」の CheckMenuItem ハンドル(チェック状態の同期用)
+struct ThemeMenuItems(Vec<CheckMenuItem<tauri::Wry>>);
+
+// テーマ確定時にフロントエンドから呼ばれる: メニューチェックの排他同期 + ウィンドウ chrome 切替
+#[tauri::command]
+fn set_theme(
+    app: tauri::AppHandle,
+    items: tauri::State<ThemeMenuItems>,
+    theme: String,
+    dark: bool,
+) -> Result<(), String> {
+    let target = format!("theme:{theme}");
+    for item in &items.0 {
+        item.set_checked(item.id().0 == target)
+            .map_err(|e| e.to_string())?;
+    }
+    app.set_theme(Some(if dark {
+        tauri::Theme::Dark
+    } else {
+        tauri::Theme::Light
+    }));
+    Ok(())
+}
 
 pub fn run() {
     tauri::Builder::default()
@@ -93,6 +124,30 @@ pub fn run() {
                 )
                 .build()?;
 
+            let theme_defs = [
+                ("theme:dark", "ダーク"),
+                ("theme:light", "ライト"),
+                ("theme:solarized-dark", "Solarized ダーク"),
+                ("theme:solarized-light", "Solarized ライト"),
+            ];
+            let mut theme_items = Vec::new();
+            for (id, label) in theme_defs {
+                theme_items.push(
+                    CheckMenuItemBuilder::with_id(id, label)
+                        // 既定はダーク。起動直後にフロントエンドの set_theme で保存値に同期される
+                        .checked(id == "theme:dark")
+                        .build(app)?,
+                );
+            }
+            let mut theme_sub = SubmenuBuilder::new(app, "テーマ");
+            for item in &theme_items {
+                theme_sub = theme_sub.item(item);
+            }
+            let view_menu = SubmenuBuilder::new(app, "表示")
+                .item(&theme_sub.build()?)
+                .build()?;
+            app.manage(ThemeMenuItems(theme_items));
+
             let window_menu = SubmenuBuilder::new(app, "ウインドウ")
                 .item(&PredefinedMenuItem::minimize(app, Some("しまう"))?)
                 .item(&PredefinedMenuItem::fullscreen(app, Some("フルスクリーン"))?)
@@ -104,6 +159,7 @@ pub fn run() {
                     &file_menu,
                     &edit_menu,
                     &search_menu,
+                    &view_menu,
                     &window_menu,
                 ])
                 .build()?;
@@ -117,6 +173,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            quit_app,
+            set_theme,
             grep::grep_search,
             file_io::read_file,
             file_io::write_file,

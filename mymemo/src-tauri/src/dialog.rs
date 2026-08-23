@@ -23,66 +23,60 @@ fn make_popup(
     items: &[&str],
     selected: &str,
 ) -> Retained<NSPopUpButton> {
-    unsafe {
-        let popup = NSPopUpButton::initWithFrame_pullsDown(
-            mtm.alloc(),
-            NSRect::new(NSPoint::new(x, y), NSSize::new(160.0, 26.0)),
-            false,
-        );
-        for item in items {
-            popup.addItemWithTitle(&NSString::from_str(item));
-        }
-        popup.selectItemWithTitle(&NSString::from_str(selected));
-        popup
+    let popup = NSPopUpButton::initWithFrame_pullsDown(
+        mtm.alloc(),
+        NSRect::new(NSPoint::new(x, y), NSSize::new(160.0, 26.0)),
+        false,
+    );
+    for item in items {
+        popup.addItemWithTitle(&NSString::from_str(item));
     }
+    popup.selectItemWithTitle(&NSString::from_str(selected));
+    popup
 }
 
 fn make_label(mtm: MainThreadMarker, text: &str, x: f64, y: f64) -> Retained<NSTextField> {
-    unsafe {
-        let label = NSTextField::labelWithString(&NSString::from_str(text), mtm);
-        label.setFrame(NSRect::new(NSPoint::new(x, y), NSSize::new(100.0, 20.0)));
-        label
-    }
+    let label = NSTextField::labelWithString(&NSString::from_str(text), mtm);
+    label.setFrame(NSRect::new(NSPoint::new(x, y), NSSize::new(100.0, 20.0)));
+    label
 }
 
 fn run_panel(default_name: &str, encoding: &str, line_ending: &str) -> Option<SaveChoice> {
     let mtm = MainThreadMarker::new()?;
-    unsafe {
-        let panel = NSSavePanel::savePanel(mtm);
-        panel.setNameFieldStringValue(&NSString::from_str(default_name));
-        panel.setCanCreateDirectories(true);
+    let panel = NSSavePanel::savePanel(mtm);
+    panel.setNameFieldStringValue(&NSString::from_str(default_name));
+    panel.setCanCreateDirectories(true);
 
-        let view = NSView::initWithFrame(
-            mtm.alloc(),
-            NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(300.0, 74.0)),
-        );
-        let enc_label = make_label(mtm, "文字コード:", 0.0, 44.0);
-        let enc_popup = make_popup(mtm, 100.0, 40.0, &ENCODINGS, encoding);
-        let eol_label = make_label(mtm, "改行コード:", 0.0, 12.0);
-        let eol_popup = make_popup(mtm, 100.0, 8.0, &LINE_ENDINGS, line_ending);
-        view.addSubview(&enc_label);
-        view.addSubview(&enc_popup);
-        view.addSubview(&eol_label);
-        view.addSubview(&eol_popup);
-        panel.setAccessoryView(Some(&view));
+    let view = NSView::initWithFrame(
+        mtm.alloc(),
+        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(300.0, 74.0)),
+    );
+    let enc_label = make_label(mtm, "文字コード:", 0.0, 44.0);
+    let enc_popup = make_popup(mtm, 100.0, 40.0, &ENCODINGS, encoding);
+    let eol_label = make_label(mtm, "改行コード:", 0.0, 12.0);
+    let eol_popup = make_popup(mtm, 100.0, 8.0, &LINE_ENDINGS, line_ending);
+    view.addSubview(&enc_label);
+    view.addSubview(&enc_popup);
+    view.addSubview(&eol_label);
+    view.addSubview(&eol_popup);
+    panel.setAccessoryView(Some(&view));
 
-        // NSModalResponseOK == 1
-        if panel.runModal() != 1 {
-            return None;
-        }
-        let path = panel.URL()?.path()?.to_string();
-        Some(SaveChoice {
-            path,
-            encoding: enc_popup
-                .titleOfSelectedItem()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| encoding.to_string()),
-            line_ending: eol_popup
-                .titleOfSelectedItem()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| line_ending.to_string()),
-        })
+    // NSModalResponseOK == 1
+    if panel.runModal() != 1 {
+        return None;
     }
+    let path = panel.URL()?.path()?.to_string();
+    Some(SaveChoice {
+        path,
+        encoding: enc_popup
+            .titleOfSelectedItem()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| encoding.to_string()),
+        line_ending: eol_popup
+            .titleOfSelectedItem()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| line_ending.to_string()),
+    })
 }
 
 #[tauri::command]

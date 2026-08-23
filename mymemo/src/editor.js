@@ -1,4 +1,4 @@
-import { EditorState, StateEffect, StateField } from "@codemirror/state";
+import { EditorState, StateEffect, StateField, Compartment } from "@codemirror/state";
 import { Decoration } from "@codemirror/view";
 import {
   EditorView,
@@ -12,7 +12,16 @@ import {
   highlightSpecialChars,
 } from "@codemirror/view";
 import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
-import { bracketMatching, indentUnit } from "@codemirror/language";
+import {
+  bracketMatching,
+  indentUnit,
+  indentOnInput,
+  syntaxHighlighting,
+  HighlightStyle,
+  LanguageDescription,
+} from "@codemirror/language";
+import { languages } from "@codemirror/language-data";
+import { tags as t } from "@lezer/highlight";
 import {
   search,
   searchKeymap,
@@ -29,26 +38,84 @@ import {
   replaceAll,
 } from "@codemirror/search";
 
-const darkTheme = EditorView.theme(
-  {
-    "&": { backgroundColor: "#1e1e1e", color: "#ddd" },
-    ".cm-gutters": {
-      backgroundColor: "#1e1e1e",
-      color: "#666",
-      border: "none",
-    },
-    ".cm-activeLine": { backgroundColor: "#ffffff0a" },
-    ".cm-activeLineGutter": { backgroundColor: "#ffffff0a" },
-    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-      backgroundColor: "#3a5a8c88 !important",
-    },
-    ".cm-cursor": { borderLeftColor: "#fff" },
-    ".cm-panels": { backgroundColor: "#2a2a2a", color: "#ddd" },
-    ".cm-searchMatch": { backgroundColor: "#e8b75033" },
-    ".cm-searchMatch-selected": { backgroundColor: "#e8b75077" },
+// 色は themes.css のトークンを参照するため、テーマが増えても
+// CodeMirror 拡張は dark/light の2バリアントで足りる(切替は {dark} フラグのみ)
+const themeSpec = {
+  "&": { backgroundColor: "var(--bg-base)", color: "var(--fg-primary)" },
+  ".cm-gutters": {
+    backgroundColor: "var(--bg-base)",
+    color: "var(--ed-gutter-fg)",
+    border: "none",
   },
-  { dark: true }
-);
+  ".cm-activeLine": { backgroundColor: "var(--ed-activeline)" },
+  ".cm-activeLineGutter": { backgroundColor: "var(--ed-activeline)" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+    backgroundColor: "var(--ed-selection) !important",
+  },
+  ".cm-cursor": { borderLeftColor: "var(--ed-cursor)" },
+  ".cm-panels": { backgroundColor: "var(--bg-surface)", color: "var(--fg-primary)" },
+  ".cm-searchMatch": { backgroundColor: "var(--ed-search-match)" },
+  ".cm-searchMatch-selected": { backgroundColor: "var(--ed-search-match-selected)" },
+  ".cm-selectionMatch": { backgroundColor: "var(--ed-selection-match)" },
+  "&.cm-focused .cm-matchingBracket": {
+    backgroundColor: "var(--ed-matching-bracket)",
+  },
+};
+
+// EditorView.theme は呼ぶたびに CSS を注入するため、モジュールロード時に1回だけ生成する
+const cmThemes = {
+  dark: EditorView.theme(themeSpec, { dark: true }),
+  light: EditorView.theme(themeSpec, { dark: false }),
+};
+const themeCompartment = new Compartment();
+let editorDark = true;
+
+// テーマ切替時: 新規タブ用の極性を更新し、既存 state 向け reconfigure エフェクトのファクトリを返す
+export function setEditorDark(dark) {
+  editorDark = dark;
+  return () => themeCompartment.reconfigure(cmThemes[dark ? "dark" : "light"]);
+}
+
+// 言語(シンタックスハイライト)は拡張子から非同期ロードするため Compartment で後から差し替える
+const languageCompartment = new Compartment();
+
+// path とファイル先頭行から LanguageDescription を返す(なければ null = プレーンテキスト)
+export function detectLanguage(path, firstLine = "") {
+  const name = path ? path.split("/").pop() : "";
+  let desc = name ? LanguageDescription.matchFilename(languages, name) : null;
+  if (!desc && firstLine.startsWith("#!")) {
+    // 拡張子なしスクリプト用の shebang 判定
+    if (/python/.test(firstLine)) desc = LanguageDescription.matchLanguageName(languages, "python");
+    else if (/\b(?:ba|z|k|da)?sh\b/.test(firstLine)) desc = LanguageDescription.matchLanguageName(languages, "shell");
+  }
+  return desc;
+}
+
+// ロード済み LanguageSupport(null でプレーンテキスト)を適用する reconfigure エフェクト
+export function languageEffect(support) {
+  return languageCompartment.reconfigure(support ?? []);
+}
+
+// 色は themes.css の --syn-* トークンを参照するため、単一定義で全テーマに追従する
+const highlightStyle = HighlightStyle.define([
+  { tag: t.keyword, color: "var(--syn-keyword)" },
+  { tag: [t.string, t.special(t.string)], color: "var(--syn-string)" },
+  { tag: t.comment, color: "var(--syn-comment)", fontStyle: "italic" },
+  { tag: t.number, color: "var(--syn-number)" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "var(--syn-function)" },
+  { tag: [t.variableName, t.definition(t.variableName)], color: "var(--syn-variable)" },
+  { tag: [t.typeName, t.className, t.namespace], color: "var(--syn-type)" },
+  { tag: [t.operator, t.punctuation], color: "var(--syn-operator)" },
+  { tag: [t.propertyName, t.attributeName], color: "var(--syn-property)" },
+  { tag: [t.bool, t.atom, t.null, t.constant(t.variableName)], color: "var(--syn-constant)" },
+  { tag: [t.meta, t.processingInstruction, t.documentMeta], color: "var(--syn-meta)" },
+  { tag: [t.regexp, t.escape], color: "var(--syn-regexp)" },
+  { tag: t.heading, color: "var(--syn-heading)", fontWeight: "bold" },
+  { tag: t.link, color: "var(--syn-heading)", textDecoration: "underline" },
+  { tag: t.strong, fontWeight: "bold" },
+  { tag: t.emphasis, fontStyle: "italic" },
+  { tag: t.invalid, color: "var(--syn-invalid)" },
+]);
 
 // カスタム検索・置換パネル(日本語、単語単位なし、閉じるボタン付き)
 function createSearchPanel(view) {
@@ -217,11 +284,14 @@ export function baseExtensions(onChange) {
     rectangularSelection(), // Alt+ドラッグで矩形選択
     crosshairCursor(),
     bracketMatching(),
+    languageCompartment.of([]), // 言語は非同期で後から reconfigure される
+    syntaxHighlighting(highlightStyle),
+    indentOnInput(), // 言語なしでは no-op。indentUnit の4スペースを尊重
     highlightSelectionMatches(),
     search({ top: true, createPanel: createSearchPanel }),
     indentUnit.of("    "),
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
-    darkTheme,
+    themeCompartment.of(cmThemes[editorDark ? "dark" : "light"]),
     japanesePhrases,
     jumpHighlightField,
     EditorView.updateListener.of((u) => {

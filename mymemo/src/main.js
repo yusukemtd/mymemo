@@ -6,13 +6,16 @@ import {
   setJumpHighlight,
 } from "./editor.js";
 import * as Tabs from "./tabs.js";
+import { initTheme, applyTheme } from "./theme.js";
 import { initGrep, toggleGrep } from "./grep.js";
 import { open, confirm, message } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen } from "@tauri-apps/api/event";
 
 // --- 起動 ---
+initTheme(); // エディタ生成前に呼ぶ(初期 state のテーマ極性が決まる)
 const container = document.getElementById("editor-container");
 const view = createView(container, createEditorState("", () => {}));
 Tabs.initTabs(view);
@@ -54,7 +57,7 @@ async function openFile(path = null, encoding = null) {
     Tabs.activate(existing);
     if (t.dirty && !(await confirmDiscard(t))) return;
     t.dirty = false;
-    await Tabs.closeTab(existing, null);
+    await Tabs.closeTab(existing, null, false);
   }
   const active = Tabs.getActiveTab();
   // 空の無題タブなら再利用する
@@ -150,6 +153,10 @@ listen("menu", async ({ payload }) => {
     await openFile(null, payload.slice("open_enc:".length));
     return;
   }
+  if (payload.startsWith("theme:")) {
+    applyTheme(payload.slice("theme:".length));
+    return;
+  }
   switch (payload) {
     case "new":
       Tabs.newTab();
@@ -176,6 +183,20 @@ listen("menu", async ({ payload }) => {
     case "grep":
       toggleGrep();
       break;
+  }
+});
+
+// --- ファイルのドラッグ&ドロップで開く ---
+getCurrentWebview().onDragDropEvent(async ({ payload }) => {
+  if (payload.type === "enter") {
+    document.body.classList.add("drag-over");
+  } else if (payload.type === "leave") {
+    document.body.classList.remove("drag-over");
+  } else if (payload.type === "drop") {
+    document.body.classList.remove("drag-over");
+    for (const path of payload.paths) {
+      await openFile(path);
+    }
   }
 });
 

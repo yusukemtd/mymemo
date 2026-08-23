@@ -1,3 +1,5 @@
+@import "./themes.css";
+
 * {
   margin: 0;
   padding: 0;
@@ -11,8 +13,8 @@ body,
   overflow: hidden;
   font-family: -apple-system, "Hiragino Sans", sans-serif;
   font-size: 13px;
-  background: #1e1e1e;
-  color: #ddd;
+  background: var(--bg-base);
+  color: var(--fg-primary);
 }
 
 #app {
@@ -24,8 +26,8 @@ body,
 #tabbar {
   display: flex;
   flex-shrink: 0;
-  background: #2a2a2a;
-  border-bottom: 1px solid #4d4d4d;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-strong);
   overflow-x: auto;
   user-select: none;
   -webkit-user-select: none;
@@ -36,17 +38,17 @@ body,
   align-items: center;
   gap: 6px;
   padding: 7px 10px 7px 14px;
-  border-right: 1px solid #454545;
+  border-right: 1px solid var(--border-mid);
   cursor: default;
   white-space: nowrap;
-  color: #999;
+  color: var(--fg-muted);
   max-width: 220px;
 }
 
 .tab.active {
-  background: #1e1e1e;
-  color: #eee;
-  box-shadow: inset 0 2px 0 #5a8dd6;
+  background: var(--bg-base);
+  color: var(--fg-strong);
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 
 .tab .tab-name {
@@ -71,26 +73,26 @@ body,
 }
 
 .tab .tab-close:hover {
-  background: #444;
+  background: var(--bg-hover-strong);
 }
 
 .tab.dirty .tab-name::after {
   content: " ●";
-  color: #e8b750;
+  color: var(--warning);
   font-size: 9px;
 }
 
 #tab-new {
   border: none;
   background: none;
-  color: #888;
+  color: var(--fg-faint);
   font-size: 16px;
   padding: 4px 12px;
   cursor: pointer;
 }
 
 #tab-new:hover {
-  color: #fff;
+  color: var(--fg-max);
 }
 
 /* --- editor --- */
@@ -119,8 +121,8 @@ body,
   height: 40%;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid #4d4d4d;
-  background: #232323;
+  border-top: 1px solid var(--border-strong);
+  background: var(--bg-panel);
 }
 
 #grep-panel.hidden {
@@ -132,49 +134,49 @@ body,
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  border-bottom: 1px solid #454545;
+  border-bottom: 1px solid var(--border-mid);
   flex-wrap: wrap;
 }
 
 #grep-form input[type="text"] {
   flex: 1;
   min-width: 160px;
-  background: #1a1a1a;
-  border: 1px solid #3a3a3a;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-input);
   border-radius: 4px;
-  color: #ddd;
+  color: var(--fg-primary);
   padding: 4px 8px;
   font-family: "SF Mono", Menlo, monospace;
 }
 
 #grep-form input[type="text"]:focus {
   outline: none;
-  border-color: #5a8dd6;
+  border-color: var(--accent);
 }
 
 #grep-form button {
-  background: #3a3a3a;
+  background: var(--bg-element);
   border: none;
   border-radius: 4px;
-  color: #ddd;
+  color: var(--fg-primary);
   padding: 4px 10px;
   cursor: pointer;
 }
 
 #grep-form button:hover {
-  background: #4a4a4a;
+  background: var(--bg-element-hover);
 }
 
 #grep-form label {
   display: flex;
   align-items: center;
   gap: 3px;
-  color: #aaa;
+  color: var(--fg-secondary);
   font-size: 12px;
 }
 
 #grep-dir-label {
-  color: #8ab4f8;
+  color: var(--accent-text);
   font-size: 12px;
   max-width: 260px;
   overflow: hidden;
@@ -184,7 +186,7 @@ body,
 }
 
 #grep-status {
-  color: #888;
+  color: var(--fg-faint);
   font-size: 12px;
 }
 
@@ -197,9 +199,9 @@ body,
 
 .grep-file {
   padding: 4px 10px;
-  background: #333842;
-  color: #9ec3ff;
-  border-bottom: 1px solid #454545;
+  background: var(--accent-surface);
+  color: var(--accent-text-strong);
+  border-bottom: 1px solid var(--border-mid);
   position: sticky;
   top: 0;
 }
@@ -213,11 +215,11 @@ body,
 }
 
 .grep-hit:hover {
-  background: #333;
+  background: var(--bg-hover);
 }
 
 .grep-hit .lineno {
-  color: #777;
+  color: var(--fg-dim);
   min-width: 4ch;
   text-align: right;
 }
@@ -233,8 +235,8 @@ body,
   flex-direction: column;
   gap: 5px;
   padding: 6px 10px;
-  background: #2a2a2a;
-  border-bottom: 1px solid #4d4d4d;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-strong);
 }
 
 .mm-search-row {
@@ -246,10 +248,10 @@ body,
 .mm-search input[type="text"],
 .mm-search input:not([type]) {
   width: 260px;
-  background: #1a1a1a;
-  border: 1px solid #3a3a3a;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-input);
   border-radius: 4px;
-  color: #ddd;
+  color: var(--fg-primary);
   padding: 3px 8px;
   font-family: "SF Mono", Menlo, monospace;
   font-size: 12px;
@@ -257,28 +259,28 @@ body,
 
 .mm-search input:not([type]):focus {
   outline: none;
-  border-color: #5a8dd6;
+  border-color: var(--accent);
 }
 
 .mm-search button {
-  background: #3a3a3a;
+  background: var(--bg-element);
   border: none;
   border-radius: 4px;
-  color: #ddd;
+  color: var(--fg-primary);
   padding: 3px 10px;
   cursor: pointer;
   font-size: 12px;
 }
 
 .mm-search button:hover {
-  background: #4a4a4a;
+  background: var(--bg-element-hover);
 }
 
 .mm-search label {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #aaa;
+  color: var(--fg-secondary);
   font-size: 12px;
   white-space: nowrap;
   user-select: none;
@@ -300,9 +302,9 @@ body,
   align-items: center;
   gap: 16px;
   padding: 3px 12px;
-  background: #2a2a2a;
-  border-top: 1px solid #4d4d4d;
-  color: #999;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-strong);
+  color: var(--fg-muted);
   font-size: 11px;
   user-select: none;
   -webkit-user-select: none;
@@ -314,5 +316,16 @@ body,
 
 /* jump highlight in editor */
 .cm-grep-jump {
-  background: rgba(232, 183, 80, 0.35);
+  background: var(--ed-jump-line);
+}
+
+/* --- drag & drop --- */
+body.drag-over::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }

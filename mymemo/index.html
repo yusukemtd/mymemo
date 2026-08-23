@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>mymemo</title>
+    <!-- 保存済みテーマを最初の描画前に適用する(FOUC 対策) -->
+    <script>
+      try {
+        var t = localStorage.getItem("mymemo.theme");
+        if (t) document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
