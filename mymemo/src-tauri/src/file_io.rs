@@ -40,6 +40,32 @@ fn normalize_newlines(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
+// BOM → UTF-8 → CP932 → EUC-JP の順で自動判定してデコードする。
+// どれでも正しく読めない場合は UTF-8 の lossy デコードにして lossy = true を返す。
+// grep 側も同じ判定を使うことで、検索結果とエディタで開いたときの解釈が一致する
+pub(crate) fn decode_auto(bytes: Vec<u8>) -> (String, &'static Encoding, bool) {
+    if let Some((enc, _bom_len)) = Encoding::for_bom(&bytes) {
+        let (text, _, had_errors) = enc.decode(&bytes);
+        return (text.into_owned(), enc, had_errors);
+    }
+    match String::from_utf8(bytes) {
+        Ok(text) => (text, UTF_8, false),
+        Err(e) => {
+            let bytes = e.into_bytes();
+            let (sjis_text, _, sjis_err) = SHIFT_JIS.decode(&bytes);
+            if !sjis_err {
+                return (sjis_text.into_owned(), SHIFT_JIS, false);
+            }
+            let (euc_text, _, euc_err) = EUC_JP.decode(&bytes);
+            if !euc_err {
+                return (euc_text.into_owned(), EUC_JP, false);
+            }
+            let (text, _, _) = UTF_8.decode(&bytes);
+            (text.into_owned(), UTF_8, true)
+        }
+    }
+}
+
 // 同期コマンドはメインスレッドで実行され、巨大ファイルで UI が固まるため
 // blocking スレッドへ逃がす(write_file も同様)
 #[tauri::command]
@@ -57,24 +83,8 @@ fn read_file_impl(path: String, encoding: Option<String>) -> Result<FileContent,
         let enc = encoding_for(&name)?;
         let (text, _, had_errors) = enc.decode(&bytes);
         (text.into_owned(), enc, had_errors)
-    } else if let Some((enc, _bom_len)) = Encoding::for_bom(&bytes) {
-        let (text, _, had_errors) = enc.decode(&bytes);
-        (text.into_owned(), enc, had_errors)
-    } else if let Ok(text) = String::from_utf8(bytes.clone()) {
-        (text, UTF_8, false)
     } else {
-        let (sjis_text, _, sjis_err) = SHIFT_JIS.decode(&bytes);
-        if !sjis_err {
-            (sjis_text.into_owned(), SHIFT_JIS, false)
-        } else {
-            let (euc_text, _, euc_err) = EUC_JP.decode(&bytes);
-            if !euc_err {
-                (euc_text.into_owned(), EUC_JP, false)
-            } else {
-                let (text, _, _) = UTF_8.decode(&bytes);
-                (text.into_owned(), UTF_8, true)
-            }
-        }
+        decode_auto(bytes)
     };
 
     let line_ending = detect_line_ending(&text);
