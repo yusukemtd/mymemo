@@ -115,3 +115,119 @@ pub fn write_file(
     };
     fs::write(&path, bytes).map_err(|e| format!("保存エラー: {e}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn write_bytes(dir: &tempfile::TempDir, name: &str, bytes: &[u8]) -> String {
+        let path = dir.path().join(name);
+        fs::write(&path, bytes).unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn read_utf8_without_bom() {
+        let dir = tempdir().unwrap();
+        let path = write_bytes(&dir, "a.txt", "こんにちは\n".as_bytes());
+        let r = read_file(path, None).unwrap();
+        assert_eq!(r.content, "こんにちは\n");
+        assert_eq!(r.encoding, "UTF-8");
+        assert_eq!(r.line_ending, "LF");
+        assert!(!r.lossy);
+    }
+
+    #[test]
+    fn read_utf8_with_bom_strips_bom() {
+        let dir = tempdir().unwrap();
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend_from_slice("abc".as_bytes());
+        let path = write_bytes(&dir, "bom.txt", &bytes);
+        let r = read_file(path, None).unwrap();
+        assert_eq!(r.content, "abc");
+        assert_eq!(r.encoding, "UTF-8");
+    }
+
+    #[test]
+    fn read_auto_detects_cp932() {
+        let dir = tempdir().unwrap();
+        let (bytes, _, _) = SHIFT_JIS.encode("日本語テキスト");
+        let path = write_bytes(&dir, "sjis.txt", &bytes);
+        let r = read_file(path, None).unwrap();
+        assert_eq!(r.content, "日本語テキスト");
+        assert_eq!(r.encoding, "CP932");
+    }
+
+    #[test]
+    fn read_with_explicit_euc_jp() {
+        let dir = tempdir().unwrap();
+        let (bytes, _, _) = EUC_JP.encode("日本語");
+        let path = write_bytes(&dir, "euc.txt", &bytes);
+        let r = read_file(path, Some("EUC-JP".to_string())).unwrap();
+        assert_eq!(r.content, "日本語");
+        assert_eq!(r.encoding, "EUC-JP");
+    }
+
+    #[test]
+    fn read_unknown_encoding_is_error() {
+        let dir = tempdir().unwrap();
+        let path = write_bytes(&dir, "x.txt", b"abc");
+        assert!(read_file(path, Some("NO-SUCH-ENC".to_string())).is_err());
+    }
+
+    #[test]
+    fn read_detects_crlf_and_normalizes() {
+        let dir = tempdir().unwrap();
+        let path = write_bytes(&dir, "crlf.txt", b"a\r\nb\r\n");
+        let r = read_file(path, None).unwrap();
+        assert_eq!(r.line_ending, "CRLF");
+        assert_eq!(r.content, "a\nb\n");
+    }
+
+    #[test]
+    fn read_detects_cr_only() {
+        let dir = tempdir().unwrap();
+        let path = write_bytes(&dir, "cr.txt", b"a\rb");
+        let r = read_file(path, None).unwrap();
+        assert_eq!(r.line_ending, "CR");
+        assert_eq!(r.content, "a\nb");
+    }
+
+    #[test]
+    fn write_crlf_restores_line_endings() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.txt").to_string_lossy().into_owned();
+        write_file(path.clone(), "a\nb".into(), "UTF-8".into(), "CRLF".into()).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"a\r\nb");
+    }
+
+    #[test]
+    fn write_cp932_round_trip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.txt").to_string_lossy().into_owned();
+        write_file(path.clone(), "日本語".into(), "CP932".into(), "LF".into()).unwrap();
+        let r = read_file(path, Some("CP932".to_string())).unwrap();
+        assert_eq!(r.content, "日本語");
+    }
+
+    #[test]
+    fn write_utf16le_has_bom_and_round_trips() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.txt").to_string_lossy().into_owned();
+        write_file(path.clone(), "あA".into(), "UTF-16LE".into(), "LF".into()).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        assert_eq!(&bytes[..2], &[0xFF, 0xFE]);
+        let r = read_file(path, None).unwrap(); // BOM から自動判定される
+        assert_eq!(r.content, "あA");
+    }
+
+    #[test]
+    fn write_unencodable_char_is_error() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("out.txt").to_string_lossy().into_owned();
+        let err = write_file(path.clone(), "🍣".into(), "CP932".into(), "LF".into());
+        assert!(err.is_err());
+        assert!(!dir.path().join("out.txt").exists()); // エラー時はファイルを作らない
+    }
+}

@@ -91,3 +91,94 @@ fn regex_escape(s: &str) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn setup(files: &[(&str, &[u8])]) -> tempfile::TempDir {
+        let dir = tempdir().unwrap();
+        for (name, bytes) in files {
+            fs::write(dir.path().join(name), bytes).unwrap();
+        }
+        dir
+    }
+
+    fn search(dir: &tempfile::TempDir, pat: &str, is_regex: bool, case: bool) -> GrepResult {
+        grep_search(
+            dir.path().to_string_lossy().into_owned(),
+            pat.to_string(),
+            is_regex,
+            case,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn literal_search_does_not_treat_dot_as_wildcard() {
+        let dir = setup(&[("a.txt", b"a.b\naXb\n")]);
+        let r = search(&dir, "a.b", false, true);
+        assert_eq!(r.hits.len(), 1);
+        assert_eq!(r.hits[0].line_number, 1);
+        assert!(!r.truncated);
+    }
+
+    #[test]
+    fn regex_search_matches_pattern() {
+        let dir = setup(&[("a.txt", b"foo1\nfoo2\nbar\n")]);
+        let r = search(&dir, r"foo\d", true, true);
+        assert_eq!(r.hits.len(), 2);
+    }
+
+    #[test]
+    fn case_insensitive_by_default_flag() {
+        let dir = setup(&[("a.txt", b"Hello\nhello\n")]);
+        assert_eq!(search(&dir, "hello", false, false).hits.len(), 2);
+        assert_eq!(search(&dir, "hello", false, true).hits.len(), 1);
+    }
+
+    #[test]
+    fn invalid_regex_returns_error() {
+        let dir = setup(&[("a.txt", b"x\n")]);
+        let err = grep_search(
+            dir.path().to_string_lossy().into_owned(),
+            "(".to_string(),
+            true,
+            true,
+        );
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn hidden_files_are_skipped() {
+        let dir = setup(&[("a.txt", b"needle\n"), (".secret", b"needle\n")]);
+        let r = search(&dir, "needle", false, true);
+        assert_eq!(r.hits.len(), 1);
+        assert!(r.hits[0].path.ends_with("a.txt"));
+    }
+
+    #[test]
+    fn binary_files_are_skipped() {
+        let dir = setup(&[("bin.dat", b"needle\x00needle\n"), ("a.txt", b"needle\n")]);
+        let r = search(&dir, "needle", false, true);
+        assert_eq!(r.hits.len(), 1);
+        assert!(r.hits[0].path.ends_with("a.txt"));
+    }
+
+    #[test]
+    fn long_lines_are_clamped_to_500_chars() {
+        let long = format!("needle{}\n", "x".repeat(1000));
+        let dir = setup(&[("a.txt", long.as_bytes())]);
+        let r = search(&dir, "needle", false, true);
+        assert_eq!(r.hits[0].line_text.chars().count(), 500);
+    }
+
+    #[test]
+    fn regex_escape_escapes_metacharacters() {
+        assert_eq!(regex_escape("a.b*c"), r"a\.b\*c");
+        assert_eq!(regex_escape("plain"), "plain");
+        assert_eq!(regex_escape(r"\d"), r"\\d");
+    }
+}

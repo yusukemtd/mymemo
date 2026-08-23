@@ -30,4 +30,11 @@ npm run tauri dev     # 開発起動
 npm run tauri build   # .app 生成 → src-tauri/target/release/bundle/macos/mymemo.app
 ```
 
+## テスト
+
+```sh
+npm test                        # フロントエンド (vitest): 言語検出・タブ管理
+cd src-tauri && cargo test      # Rust: エンコーディング判定・改行コード・grep
+```
+
 grep は Rust 側で ripgrep のライブラリ(grep-searcher / ignore)を使用。.gitignore を尊重し、バイナリはスキップ、結果は 5,000 件で打ち切り。

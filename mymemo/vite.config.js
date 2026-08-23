@@ -10,4 +10,7 @@ export default defineConfig({
     target: "safari15",
     outDir: "dist",
   },
+  test: {
+    environment: "jsdom",
+  },
 });
