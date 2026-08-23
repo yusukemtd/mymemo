@@ -121,6 +121,10 @@ export async function closeTab(index, onConfirmClose, quitIfLast = true) {
   const t = tabs[index];
   if (!t) return;
   if (t.dirty && onConfirmClose && !(await onConfirmClose(t))) return;
+  // アクティブタブの state はタブ切替時にしか同期されないため、閉じる前に保存する
+  // (非アクティブタブを閉じたときにアクティブタブの編集が巻き戻るのを防ぐ)
+  saveCurrentState();
+  const wasActive = index === activeIndex;
   tabs.splice(index, 1);
   if (tabs.length === 0) {
     activeIndex = -1;
@@ -132,7 +136,8 @@ export async function closeTab(index, onConfirmClose, quitIfLast = true) {
     return;
   }
   if (activeIndex >= index) activeIndex = Math.max(0, activeIndex - 1);
-  view.setState(tabs[activeIndex].state);
+  // 非アクティブタブを閉じた場合は表示中の view に触らない(スクロール位置等を保つ)
+  if (wasActive) view.setState(tabs[activeIndex].state);
   render();
 }
 
@@ -151,14 +156,15 @@ export function replaceActiveTab(path, content, encoding = "UTF-8", lineEnding =
   render();
 }
 
-export function markSaved(path) {
-  const t = tabs[activeIndex];
-  if (!t) return;
-  t.dirty = false;
+// 保存完了時に呼ぶ。保存待ちの間にアクティブタブが切り替わっても
+// 正しいタブへ反映されるよう、対象タブを引数で受け取る
+export function markSaved(tab, path) {
+  if (!tabs.includes(tab)) return; // 保存中に閉じられたタブは無視
+  tab.dirty = false;
   if (path) {
-    t.path = path;
-    t.name = path.split("/").pop();
-    applyLanguage(t); // 別名保存で拡張子が変わった場合の言語再検出
+    tab.path = path;
+    tab.name = path.split("/").pop();
+    applyLanguage(tab); // 別名保存で拡張子が変わった場合の言語再検出
   }
   render();
 }

@@ -123,11 +123,31 @@ describe("tabs", () => {
   it("markSaved は dirty を解除し、別名保存でタブ名を更新する", async () => {
     const { tabs } = await loadTabs();
     tabs.getActiveTab().dirty = true;
-    tabs.markSaved("/a/saved.txt");
+    tabs.markSaved(tabs.getActiveTab(), "/a/saved.txt");
     const t = tabs.getActiveTab();
     expect(t.dirty).toBe(false);
     expect(t.name).toBe("saved.txt");
     expect(t.path).toBe("/a/saved.txt");
+  });
+
+  it("markSaved は保存中にタブが切り替わっても渡されたタブへ反映する", async () => {
+    const { tabs } = await loadTabs();
+    const saved = tabs.newTab("/a/one.txt", "1");
+    saved.dirty = true;
+    tabs.activate(0); // 保存待ちの間に別タブへ切り替わった想定
+    tabs.markSaved(saved, "/a/renamed.txt");
+    expect(saved.dirty).toBe(false);
+    expect(saved.name).toBe("renamed.txt");
+    expect(tabs.getActiveTab().name).toBe("無題-1"); // アクティブタブは無関係のまま
+  });
+
+  it("非アクティブタブを閉じてもアクティブタブの未同期編集が失われない", async () => {
+    const { tabs, view } = await loadTabs();
+    tabs.newTab("/a/one.txt", "ONE"); // index 1, active
+    // タブ切替なしで編集(tab.state は未同期の状態)
+    view.dispatch({ changes: { from: 3, insert: "-edited" } });
+    await tabs.closeTab(0, null);
+    expect(view.state.doc.toString()).toBe("ONE-edited");
   });
 
   it("タブバーの DOM にアクティブ・dirty 状態が反映される", async () => {

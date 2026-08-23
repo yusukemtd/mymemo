@@ -40,9 +40,17 @@ fn normalize_newlines(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
-// encoding を省略した場合は BOM → UTF-8 → CP932 → EUC-JP の順で自動判定する
+// 同期コマンドはメインスレッドで実行され、巨大ファイルで UI が固まるため
+// blocking スレッドへ逃がす(write_file も同様)
 #[tauri::command]
-pub fn read_file(path: String, encoding: Option<String>) -> Result<FileContent, String> {
+pub async fn read_file(path: String, encoding: Option<String>) -> Result<FileContent, String> {
+    tauri::async_runtime::spawn_blocking(move || read_file_impl(path, encoding))
+        .await
+        .map_err(|e| format!("読み込みスレッドエラー: {e}"))?
+}
+
+// encoding を省略した場合は BOM → UTF-8 → CP932 → EUC-JP の順で自動判定する
+fn read_file_impl(path: String, encoding: Option<String>) -> Result<FileContent, String> {
     let bytes = fs::read(&path).map_err(|e| format!("読み込みエラー: {e}"))?;
 
     let (text, enc, lossy) = if let Some(name) = encoding {
@@ -79,7 +87,20 @@ pub fn read_file(path: String, encoding: Option<String>) -> Result<FileContent, 
 }
 
 #[tauri::command]
-pub fn write_file(
+pub async fn write_file(
+    path: String,
+    content: String,
+    encoding: String,
+    line_ending: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        write_file_impl(path, content, encoding, line_ending)
+    })
+    .await
+    .map_err(|e| format!("保存スレッドエラー: {e}"))?
+}
+
+fn write_file_impl(
     path: String,
     content: String,
     encoding: String,
@@ -131,7 +152,7 @@ mod tests {
     fn read_utf8_without_bom() {
         let dir = tempdir().unwrap();
         let path = write_bytes(&dir, "a.txt", "こんにちは\n".as_bytes());
-        let r = read_file(path, None).unwrap();
+        let r = read_file_impl(path, None).unwrap();
         assert_eq!(r.content, "こんにちは\n");
         assert_eq!(r.encoding, "UTF-8");
         assert_eq!(r.line_ending, "LF");
@@ -144,7 +165,7 @@ mod tests {
         let mut bytes = vec![0xEF, 0xBB, 0xBF];
         bytes.extend_from_slice("abc".as_bytes());
         let path = write_bytes(&dir, "bom.txt", &bytes);
-        let r = read_file(path, None).unwrap();
+        let r = read_file_impl(path, None).unwrap();
         assert_eq!(r.content, "abc");
         assert_eq!(r.encoding, "UTF-8");
     }
@@ -154,7 +175,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let (bytes, _, _) = SHIFT_JIS.encode("日本語テキスト");
         let path = write_bytes(&dir, "sjis.txt", &bytes);
-        let r = read_file(path, None).unwrap();
+        let r = read_file_impl(path, None).unwrap();
         assert_eq!(r.content, "日本語テキスト");
         assert_eq!(r.encoding, "CP932");
     }
@@ -164,7 +185,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let (bytes, _, _) = EUC_JP.encode("日本語");
         let path = write_bytes(&dir, "euc.txt", &bytes);
-        let r = read_file(path, Some("EUC-JP".to_string())).unwrap();
+        let r = read_file_impl(path, Some("EUC-JP".to_string())).unwrap();
         assert_eq!(r.content, "日本語");
         assert_eq!(r.encoding, "EUC-JP");
     }
@@ -173,14 +194,14 @@ mod tests {
     fn read_unknown_encoding_is_error() {
         let dir = tempdir().unwrap();
         let path = write_bytes(&dir, "x.txt", b"abc");
-        assert!(read_file(path, Some("NO-SUCH-ENC".to_string())).is_err());
+        assert!(read_file_impl(path, Some("NO-SUCH-ENC".to_string())).is_err());
     }
 
     #[test]
     fn read_detects_crlf_and_normalizes() {
         let dir = tempdir().unwrap();
         let path = write_bytes(&dir, "crlf.txt", b"a\r\nb\r\n");
-        let r = read_file(path, None).unwrap();
+        let r = read_file_impl(path, None).unwrap();
         assert_eq!(r.line_ending, "CRLF");
         assert_eq!(r.content, "a\nb\n");
     }
@@ -189,7 +210,7 @@ mod tests {
     fn read_detects_cr_only() {
         let dir = tempdir().unwrap();
         let path = write_bytes(&dir, "cr.txt", b"a\rb");
-        let r = read_file(path, None).unwrap();
+        let r = read_file_impl(path, None).unwrap();
         assert_eq!(r.line_ending, "CR");
         assert_eq!(r.content, "a\nb");
     }
@@ -198,7 +219,7 @@ mod tests {
     fn write_crlf_restores_line_endings() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("out.txt").to_string_lossy().into_owned();
-        write_file(path.clone(), "a\nb".into(), "UTF-8".into(), "CRLF".into()).unwrap();
+        write_file_impl(path.clone(), "a\nb".into(), "UTF-8".into(), "CRLF".into()).unwrap();
         assert_eq!(fs::read(&path).unwrap(), b"a\r\nb");
     }
 
@@ -206,8 +227,8 @@ mod tests {
     fn write_cp932_round_trip() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("out.txt").to_string_lossy().into_owned();
-        write_file(path.clone(), "日本語".into(), "CP932".into(), "LF".into()).unwrap();
-        let r = read_file(path, Some("CP932".to_string())).unwrap();
+        write_file_impl(path.clone(), "日本語".into(), "CP932".into(), "LF".into()).unwrap();
+        let r = read_file_impl(path, Some("CP932".to_string())).unwrap();
         assert_eq!(r.content, "日本語");
     }
 
@@ -215,10 +236,10 @@ mod tests {
     fn write_utf16le_has_bom_and_round_trips() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("out.txt").to_string_lossy().into_owned();
-        write_file(path.clone(), "あA".into(), "UTF-16LE".into(), "LF".into()).unwrap();
+        write_file_impl(path.clone(), "あA".into(), "UTF-16LE".into(), "LF".into()).unwrap();
         let bytes = fs::read(&path).unwrap();
         assert_eq!(&bytes[..2], &[0xFF, 0xFE]);
-        let r = read_file(path, None).unwrap(); // BOM から自動判定される
+        let r = read_file_impl(path, None).unwrap(); // BOM から自動判定される
         assert_eq!(r.content, "あA");
     }
 
@@ -226,7 +247,7 @@ mod tests {
     fn write_unencodable_char_is_error() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("out.txt").to_string_lossy().into_owned();
-        let err = write_file(path.clone(), "🍣".into(), "CP932".into(), "LF".into());
+        let err = write_file_impl(path.clone(), "🍣".into(), "CP932".into(), "LF".into());
         assert!(err.is_err());
         assert!(!dir.path().join("out.txt").exists()); // エラー時はファイルを作らない
     }

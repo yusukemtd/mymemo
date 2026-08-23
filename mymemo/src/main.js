@@ -71,6 +71,9 @@ async function openFile(path = null, encoding = null) {
 async function saveFile(as = false) {
   const tab = Tabs.getActiveTab();
   if (!tab) return false;
+  // 保存対象はこの時点のタブと内容。IPC 待ちの間にタブが切り替わっても
+  // 別のタブへ path や保存済みマークが付かないよう tab を引き回す
+  const content = view.state.doc.toString();
   let path = tab.path;
   let encoding = tab.encoding ?? "UTF-8";
   let lineEnding = tab.lineEnding ?? "LF";
@@ -87,19 +90,14 @@ async function saveFile(as = false) {
     lineEnding = choice.line_ending;
   }
   try {
-    await invoke("write_file", {
-      path,
-      content: view.state.doc.toString(),
-      encoding,
-      lineEnding,
-    });
+    await invoke("write_file", { path, content, encoding, lineEnding });
     tab.encoding = encoding;
     tab.lineEnding = lineEnding;
   } catch (err) {
     await message(String(err), { title: "mymemo", kind: "error" });
     return false;
   }
-  Tabs.markSaved(path);
+  Tabs.markSaved(tab, path);
   return true;
 }
 
@@ -121,8 +119,24 @@ window.addEventListener("active-tab-changed", updateStatusBar);
 window.addEventListener("cursor-moved", updateStatusBar);
 updateStatusBar();
 
-// grep 結果からのジャンプ
+// grep 結果からのジャンプ。ハイライト解除はジャンプ先のタブを覚えて行う
+// (タイマー発火前にタブを切り替えても、残留したり別タブに誤爆したりしないように)
+let jumpClear = null; // { tab, timer }
+
+function clearJumpHighlight() {
+  if (!jumpClear) return;
+  clearTimeout(jumpClear.timer);
+  const { tab } = jumpClear;
+  jumpClear = null;
+  if (Tabs.getActiveTab() === tab) {
+    view.dispatch({ effects: setJumpHighlight.of(null) });
+  } else if (Tabs.getTabs().includes(tab)) {
+    tab.state = tab.state.update({ effects: setJumpHighlight.of(null) }).state;
+  }
+}
+
 async function jumpTo(path, lineNumber) {
+  clearJumpHighlight(); // 前回ジャンプ先の残留ハイライトを除去
   await openFile(path);
   const line = view.state.doc.line(
     Math.min(lineNumber, view.state.doc.lines)
@@ -135,9 +149,10 @@ async function jumpTo(path, lineNumber) {
     ],
   });
   view.focus();
-  setTimeout(() => {
-    view.dispatch({ effects: setJumpHighlight.of(null) });
-  }, 1500);
+  jumpClear = {
+    tab: Tabs.getActiveTab(),
+    timer: setTimeout(clearJumpHighlight, 1500),
+  };
 }
 
 initGrep(jumpTo);
@@ -182,6 +197,11 @@ listen("menu", async ({ payload }) => {
       break;
     case "grep":
       toggleGrep();
+      break;
+    case "quit":
+      // 未保存確認を挟むため、終了メニューは PredefinedMenuItem::quit ではなく
+      // カスタム ID で受けてここで処理する
+      if (await confirmQuit()) await invoke("quit_app");
       break;
   }
 });
@@ -230,14 +250,16 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// ウィンドウを閉じる際の未保存確認
+// 終了前の未保存確認(ウィンドウを閉じる操作と Cmd+Q の両方で使う)
+async function confirmQuit() {
+  const dirtyCount = Tabs.getTabs().filter((t) => t.dirty).length;
+  if (dirtyCount === 0) return true;
+  return confirm(
+    `未保存のタブが ${dirtyCount} 個あります。変更を破棄して終了しますか?`,
+    { title: "mymemo", kind: "warning" }
+  );
+}
+
 getCurrentWindow().onCloseRequested(async (event) => {
-  const dirtyTabs = Tabs.getTabs().filter((t) => t.dirty);
-  if (dirtyTabs.length > 0) {
-    const ok = await confirm(
-      `未保存のタブが ${dirtyTabs.length} 個あります。変更を破棄して終了しますか?`,
-      { title: "mymemo", kind: "warning" }
-    );
-    if (!ok) event.preventDefault();
-  }
+  if (!(await confirmQuit())) event.preventDefault();
 });

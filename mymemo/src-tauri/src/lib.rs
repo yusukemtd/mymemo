@@ -58,7 +58,13 @@ pub fn run() {
                 .item(&PredefinedMenuItem::hide_others(app, Some("ほかを隠す"))?)
                 .item(&PredefinedMenuItem::show_all(app, Some("すべてを表示"))?)
                 .separator()
-                .item(&PredefinedMenuItem::quit(app, Some("mymemo を終了"))?)
+                // PredefinedMenuItem::quit は即終了でフロントの未保存確認を通らないため、
+                // カスタム ID にして menu イベント経由で確認後に quit_app を呼ばせる
+                .item(
+                    &MenuItemBuilder::with_id("quit", "mymemo を終了")
+                        .accelerator("CmdOrCtrl+Q")
+                        .build(app)?,
+                )
                 .build()?;
 
             let file_menu = SubmenuBuilder::new(app, "ファイル")

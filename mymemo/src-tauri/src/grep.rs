@@ -1,5 +1,5 @@
 use grep_regex::RegexMatcherBuilder;
-use grep_searcher::sinks::UTF8;
+use grep_searcher::sinks::Lossy;
 use grep_searcher::{BinaryDetection, SearcherBuilder};
 use ignore::WalkBuilder;
 use serde::Serialize;
@@ -19,8 +19,20 @@ pub struct GrepResult {
     pub truncated: bool,
 }
 
+// 同期コマンドはメインスレッドで実行され UI が固まるため、blocking スレッドへ逃がす
 #[tauri::command]
-pub fn grep_search(
+pub async fn grep_search(
+    dir: String,
+    pattern: String,
+    is_regex: bool,
+    case_sensitive: bool,
+) -> Result<GrepResult, String> {
+    tauri::async_runtime::spawn_blocking(move || grep_impl(dir, pattern, is_regex, case_sensitive))
+        .await
+        .map_err(|e| format!("検索スレッドエラー: {e}"))?
+}
+
+fn grep_impl(
     dir: String,
     pattern: String,
     is_regex: bool,
@@ -57,10 +69,12 @@ pub fn grep_search(
             continue;
         }
         let path_str = entry.path().to_string_lossy().to_string();
+        // Lossy: 非 UTF-8(CP932 等)のファイルも置換文字扱いで検索対象に含める
+        // (パターン側は UTF-8 なので、日本語パターンは非 UTF-8 ファイルにはヒットしない)
         let result = searcher.search_path(
             &matcher,
             entry.path(),
-            UTF8(|line_number, line| {
+            Lossy(|line_number, line| {
                 if hits.len() >= MAX_HITS {
                     truncated = true;
                     return Ok(false); // 走査打ち切り
@@ -107,7 +121,7 @@ mod tests {
     }
 
     fn search(dir: &tempfile::TempDir, pat: &str, is_regex: bool, case: bool) -> GrepResult {
-        grep_search(
+        grep_impl(
             dir.path().to_string_lossy().into_owned(),
             pat.to_string(),
             is_regex,
@@ -142,13 +156,22 @@ mod tests {
     #[test]
     fn invalid_regex_returns_error() {
         let dir = setup(&[("a.txt", b"x\n")]);
-        let err = grep_search(
+        let err = grep_impl(
             dir.path().to_string_lossy().into_owned(),
             "(".to_string(),
             true,
             true,
         );
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn non_utf8_files_are_searched() {
+        // CP932 のファイルもスキップされず、ASCII パターンでヒットする
+        let (sjis, _, _) = encoding_rs::SHIFT_JIS.encode("needle 日本語\nほかの行\n");
+        let dir = setup(&[("sjis.txt", &sjis[..]), ("a.txt", b"needle\n")]);
+        let r = search(&dir, "needle", false, true);
+        assert_eq!(r.hits.len(), 2);
     }
 
     #[test]

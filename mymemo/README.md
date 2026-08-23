@@ -37,4 +37,4 @@ npm test                        # フロントエンド (vitest): 言語検出�
 cd src-tauri && cargo test      # Rust: エンコーディング判定・改行コード・grep
 ```
 
-grep は Rust 側で ripgrep のライブラリ(grep-searcher / ignore)を使用。.gitignore を尊重し、バイナリはスキップ、結果は 5,000 件で打ち切り。
+grep は Rust 側で ripgrep のライブラリ(grep-searcher / ignore)を使用。.gitignore を尊重し、バイナリはスキップ、結果は 5,000 件で打ち切り。非 UTF-8(CP932 等)のファイルも検索対象になるが、日本語などマルチバイトのパターンは UTF-8 のファイルにのみヒットする。
