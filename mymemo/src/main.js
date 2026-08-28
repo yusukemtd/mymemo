@@ -4,9 +4,13 @@ import {
   createEditorState,
   createView,
   setJumpHighlight,
+  docWithLineEndings,
+  describeLineEndings,
+  lineEndingSummary,
 } from "./editor.js";
 import * as Tabs from "./tabs.js";
 import { initTheme, applyTheme } from "./theme.js";
+import { initShowWhitespace, toggleShowWhitespace } from "./whitespace.js";
 import { initGrep, toggleGrep } from "./grep.js";
 import { open, confirm, message } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
@@ -16,6 +20,7 @@ import { listen } from "@tauri-apps/api/event";
 
 // --- 起動 ---
 initTheme(); // エディタ生成前に呼ぶ(初期 state のテーマ極性が決まる)
+initShowWhitespace(); // 同上(初期 state の空白文字表示の有無が決まる)
 const container = document.getElementById("editor-container");
 const view = createView(container, createEditorState("", () => {}));
 Tabs.initTabs(view);
@@ -62,41 +67,44 @@ async function openFile(path = null, encoding = null) {
   const active = Tabs.getActiveTab();
   // 空の無題タブなら再利用する
   if (active && !active.path && !active.dirty && view.state.doc.length === 0) {
-    Tabs.replaceActiveTab(path, file.content, file.encoding, file.line_ending);
+    Tabs.replaceActiveTab(path, file.content, file.encoding);
   } else {
-    Tabs.newTab(path, file.content, file.encoding, file.line_ending);
+    Tabs.newTab(path, file.content, file.encoding);
   }
 }
 
 async function saveFile(as = false) {
   const tab = Tabs.getActiveTab();
   if (!tab) return false;
-  // 保存対象はこの時点のタブと内容。IPC 待ちの間にタブが切り替わっても
+  // 保存対象はこの時点のタブ。IPC 待ちの間にタブが切り替わっても
   // 別のタブへ path や保存済みマークが付かないよう tab を引き回す
-  const content = view.state.doc.toString();
   let path = tab.path;
   let encoding = tab.encoding ?? "UTF-8";
-  let lineEnding = tab.lineEnding ?? "LF";
+  let convertTo = null; // 別名保存で改行コードの統一を選んだ場合(既定は行ごとに保持)
   if (as || !path) {
     // ネイティブ保存パネル内で文字コード・改行コードも選択できる
+    const summary = lineEndingSummary(view.state);
     const choice = await invoke("save_dialog_with_options", {
       defaultName: tab.path ? tab.name : tab.name + ".txt",
       encoding,
-      lineEnding,
+      lineEnding: summary.mixed ? "混在" : summary.dominant,
     });
     if (!choice) return false;
     path = choice.path;
     encoding = choice.encoding;
-    lineEnding = choice.line_ending;
+    if (choice.line_ending !== "KEEP") convertTo = choice.line_ending;
   }
+  // 改行コードは行ごとに保持しているのでフロント側で復元し、Rust 側はそのまま書く
+  const content = docWithLineEndings(Tabs.stateOf(tab), convertTo);
   try {
-    await invoke("write_file", { path, content, encoding, lineEnding });
+    await invoke("write_file", { path, content, encoding });
     tab.encoding = encoding;
-    tab.lineEnding = lineEnding;
   } catch (err) {
     await message(String(err), { title: "mymemo", kind: "error" });
     return false;
   }
+  // 統一を選んだ場合は保存に成功してからエディタ側の改行コードを揃える
+  if (convertTo) Tabs.convertLineEndings(tab, convertTo);
   Tabs.markSaved(tab, path);
   return true;
 }
@@ -109,7 +117,7 @@ const statusEol = document.getElementById("status-eol");
 function updateStatusBar() {
   const tab = Tabs.getActiveTab();
   statusEnc.textContent = tab?.encoding ?? "UTF-8";
-  statusEol.textContent = tab?.lineEnding ?? "LF";
+  statusEol.textContent = describeLineEndings(view.state);
   const head = view.state.selection.main.head;
   const line = view.state.doc.lineAt(head);
   statusPos.textContent = `${line.number} 行, ${head - line.from + 1} 列`;
@@ -197,6 +205,9 @@ listen("menu", async ({ payload }) => {
       break;
     case "grep":
       toggleGrep();
+      break;
+    case "toggle_whitespace":
+      toggleShowWhitespace();
       break;
     case "quit":
       // 未保存確認を挟むため、終了メニューは PredefinedMenuItem::quit ではなく

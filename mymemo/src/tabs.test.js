@@ -109,15 +109,16 @@ describe("tabs", () => {
     expect(tabs.getActiveTab().name).toBe("無題-2");
   });
 
-  it("replaceActiveTab は無題タブをファイル内容で置き換える", async () => {
+  it("replaceActiveTab は無題タブをファイル内容で置き換える(改行コードは行ごとに保持)", async () => {
     const { tabs, view } = await loadTabs();
-    tabs.replaceActiveTab("/a/doc.md", "# hi", "CP932", "CRLF");
+    const { docWithLineEndings } = await import("./editor.js");
+    tabs.replaceActiveTab("/a/doc.md", "# hi\r\nbody\n", "CP932");
     const t = tabs.getActiveTab();
     expect(t.name).toBe("doc.md");
     expect(t.encoding).toBe("CP932");
-    expect(t.lineEnding).toBe("CRLF");
     expect(t.dirty).toBe(false);
-    expect(view.state.doc.toString()).toBe("# hi");
+    expect(view.state.doc.toString()).toBe("# hi\nbody\n");
+    expect(docWithLineEndings(view.state)).toBe("# hi\r\nbody\n");
   });
 
   it("markSaved は dirty を解除し、別名保存でタブ名を更新する", async () => {

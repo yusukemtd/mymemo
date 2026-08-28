@@ -38,6 +38,18 @@ fn set_theme(
     Ok(())
 }
 
+// 「表示 > 空白文字・改行を表示」の CheckMenuItem ハンドル(チェック状態の同期用)
+struct WhitespaceMenuItem(CheckMenuItem<tauri::Wry>);
+
+// 表示切替の確定時にフロントエンドから呼ばれる(起動時の保存値復元も含む)
+#[tauri::command]
+fn set_show_whitespace(
+    item: tauri::State<WhitespaceMenuItem>,
+    show: bool,
+) -> Result<(), String> {
+    item.0.set_checked(show).map_err(|e| e.to_string())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -149,10 +161,18 @@ pub fn run() {
             for item in &theme_items {
                 theme_sub = theme_sub.item(item);
             }
+            // 既定は表示。起動直後にフロントエンドの set_show_whitespace で保存値に同期される
+            let whitespace_item =
+                CheckMenuItemBuilder::with_id("toggle_whitespace", "空白文字・改行を表示")
+                    .checked(true)
+                    .build(app)?;
             let view_menu = SubmenuBuilder::new(app, "表示")
                 .item(&theme_sub.build()?)
+                .separator()
+                .item(&whitespace_item)
                 .build()?;
             app.manage(ThemeMenuItems(theme_items));
+            app.manage(WhitespaceMenuItem(whitespace_item));
 
             let window_menu = SubmenuBuilder::new(app, "ウインドウ")
                 .item(&PredefinedMenuItem::minimize(app, Some("しまう"))?)
@@ -181,6 +201,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             quit_app,
             set_theme,
+            set_show_whitespace,
             grep::grep_search,
             file_io::read_file,
             file_io::write_file,

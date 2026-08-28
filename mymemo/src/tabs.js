@@ -1,4 +1,9 @@
-import { createEditorState, detectLanguage, languageEffect } from "./editor.js";
+import {
+  createEditorState,
+  detectLanguage,
+  languageEffect,
+  setAllLineEndings,
+} from "./editor.js";
 import { invoke } from "@tauri-apps/api/core";
 
 // タブ管理: 各タブが自分の EditorState を保持し、切替時にビューへ差し替える。
@@ -30,6 +35,11 @@ export function getTabs() {
   return tabs;
 }
 
+// タブの現在の state(アクティブタブは view 側が最新)
+export function stateOf(tab) {
+  return tabs[activeIndex] === tab ? view.state : tab.state;
+}
+
 function markDirty() {
   const t = tabs[activeIndex];
   if (t && !t.dirty) {
@@ -38,7 +48,8 @@ function markDirty() {
   }
 }
 
-export function newTab(path = null, content = "", encoding = "UTF-8", lineEnding = "LF") {
+// content は改行コード混在可の生テキスト(改行コードは state 側で行ごとに保持される)
+export function newTab(path = null, content = "", encoding = "UTF-8") {
   untitledCount += path ? 0 : 1;
   const tab = {
     path,
@@ -46,7 +57,6 @@ export function newTab(path = null, content = "", encoding = "UTF-8", lineEnding
     state: createEditorState(content, markDirty),
     dirty: false,
     encoding,
-    lineEnding,
   };
   saveCurrentState();
   tabs.push(tab);
@@ -84,9 +94,19 @@ async function applyLanguage(tab) {
   }
   if (tab.langToken !== token) return;
   if (!tabs.includes(tab)) return;
-  const effects = languageEffect(support);
+  applyEffects(tab, languageEffect(support));
+}
+
+// 指定タブの state にエフェクトを適用する(アクティブなら view 経由、それ以外は保持中の state を差し替え)
+function applyEffects(tab, effects) {
   if (tabs[activeIndex] === tab) view.dispatch({ effects });
   else tab.state = tab.state.update({ effects }).state;
+}
+
+// 全行の改行コードを統一する(別名保存で選んだ場合)。行末記号の表示も追従する
+export function convertLineEndings(tab, lineEnding) {
+  if (!tabs.includes(tab)) return;
+  applyEffects(tab, setAllLineEndings.of(lineEnding));
 }
 
 // テーマ等の reconfigure を全タブに適用する。
@@ -142,14 +162,13 @@ export async function closeTab(index, onConfirmClose, quitIfLast = true) {
 }
 
 // 空の無題タブをファイル内容で置き換える
-export function replaceActiveTab(path, content, encoding = "UTF-8", lineEnding = "LF") {
+export function replaceActiveTab(path, content, encoding = "UTF-8") {
   const t = tabs[activeIndex];
   if (!t) return;
   t.path = path;
   t.name = path.split("/").pop();
   t.dirty = false;
   t.encoding = encoding;
-  t.lineEnding = lineEnding;
   t.state = createEditorState(content, markDirty);
   view.setState(t.state);
   applyLanguage(t);

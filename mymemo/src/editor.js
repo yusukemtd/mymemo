@@ -1,7 +1,20 @@
-import { EditorState, StateEffect, StateField, Compartment } from "@codemirror/state";
-import { Decoration } from "@codemirror/view";
+import {
+  EditorState,
+  StateEffect,
+  StateField,
+  Compartment,
+  Text,
+  RangeValue,
+  RangeSet,
+  RangeSetBuilder,
+  MapMode,
+} from "@codemirror/state";
 import {
   EditorView,
+  Decoration,
+  WidgetType,
+  ViewPlugin,
+  MatchDecorator,
   lineNumbers,
   highlightActiveLine,
   highlightActiveLineGutter,
@@ -11,7 +24,14 @@ import {
   keymap,
   highlightSpecialChars,
 } from "@codemirror/view";
-import { history, defaultKeymap, historyKeymap } from "@codemirror/commands";
+import {
+  history,
+  defaultKeymap,
+  historyKeymap,
+  invertedEffects,
+  insertTab,
+  indentLess,
+} from "@codemirror/commands";
 import {
   bracketMatching,
   indentUnit,
@@ -271,6 +291,306 @@ const jumpHighlightField = StateField.define({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+// --- 改行コード(行ごとに保持) ---
+// ファイルは改行コードが混在していてもそのまま扱う。CodeMirror の Text は改行を "\n" として
+// しか持てないため、各行の改行コード(LF/CR/CRLF)は行末位置に置いた RangeSet のマーカーで
+// 別管理し、編集に合わせて移動・削除・追加する。保存時は docWithLineEndings() で元に戻す
+export const EOL_KINDS = ["LF", "CRLF", "CR"];
+const EOL_CHARS = { LF: "\n", CR: "\r", CRLF: "\r\n" };
+
+class EolMarker extends RangeValue {
+  constructor(eol) {
+    super();
+    this.eol = eol;
+  }
+  eq(other) {
+    return other.eol === this.eol;
+  }
+}
+EolMarker.prototype.point = true;
+EolMarker.prototype.startSide = EolMarker.prototype.endSide = 1; // 行末への挿入では後ろへ動く
+EolMarker.prototype.mapMode = MapMode.TrackAfter; // 直後の "\n" が消えたらマーカーも消える
+const eolMarkers = Object.fromEntries(EOL_KINDS.map((k) => [k, new EolMarker(k)]));
+
+const emptyCounts = () => ({ LF: 0, CRLF: 0, CR: 0 });
+
+// 全行を同じ改行コードにしたマーカー集合
+function buildUniform(doc, eol) {
+  const builder = new RangeSetBuilder();
+  const counts = emptyCounts();
+  for (let i = 1; i < doc.lines; i++) {
+    builder.add(doc.line(i).to, doc.line(i).to, eolMarkers[eol]);
+  }
+  counts[eol] = doc.lines - 1;
+  return { set: builder.finish(), counts };
+}
+
+// pos にある改行のマーカー(なければ null)
+function markerAt(set, pos) {
+  let found = null;
+  set.between(pos, pos, (from, _to, m) => {
+    if (from === pos) {
+      found = m.eol;
+      return false;
+    }
+  });
+  return found;
+}
+
+// 改行を新しく挿入するときの改行コード: 挿入先の行のもの → 直前の行のもの → fallback
+function defaultEolAt(doc, set, pos, fallback) {
+  const line = doc.lineAt(pos);
+  let eol = markerAt(set, line.to);
+  if (eol == null && line.number > 1) eol = markerAt(set, line.from - 1);
+  return eol ?? fallback;
+}
+
+// 生テキスト(改行コード混在可)を Text と改行マーカーに分解する
+export function parseDocument(raw) {
+  const lines = [];
+  const builder = new RangeSetBuilder();
+  const counts = emptyCounts();
+  const re = /\r\n|\r|\n/g;
+  let last = 0;
+  let pos = 0;
+  let m;
+  while ((m = re.exec(raw))) {
+    const line = raw.slice(last, m.index);
+    lines.push(line);
+    pos += line.length;
+    const eol = m[0] === "\n" ? "LF" : m[0] === "\r" ? "CR" : "CRLF";
+    builder.add(pos, pos, eolMarkers[eol]);
+    counts[eol]++;
+    pos += 1;
+    last = m.index + m[0].length;
+  }
+  lines.push(raw.slice(last));
+  return { doc: Text.of(lines), eol: { set: builder.finish(), counts, fallback: "LF" } };
+}
+
+// 全行の改行コードを統一する(別名保存で選んだとき)
+export const setAllLineEndings = StateEffect.define();
+// undo/redo で削除した改行の改行コードを元に戻す({ pos, eol })
+const restoreLineEnding = StateEffect.define({
+  map: ({ pos, eol }, mapping) => ({ pos: mapping.mapPos(pos, 1), eol }),
+});
+
+// { set: RangeSet<EolMarker>, counts: {LF, CRLF, CR}, fallback }
+// fallback は改行が1つもないときに使う改行コード
+export const eolField = StateField.define({
+  create: (state) => ({ ...buildUniform(state.doc, "LF"), fallback: "LF" }),
+  update(value, tr) {
+    let { set, counts, fallback } = value;
+    let changed = false;
+    if (tr.docChanged) {
+      const oldSet = set;
+      const oldDoc = tr.startState.doc;
+      counts = { ...counts };
+      const adds = [];
+      tr.changes.iterChanges((fromA, toA, fromB, _toB, inserted) => {
+        // 削除範囲内の改行のマーカーは map で消える。その改行コードは同じ変更で挿入される
+        // 改行へ順に引き継ぐ(複数行にまたがる置換で改行コードが変わらないように)
+        const removed = [];
+        if (toA > fromA) {
+          oldSet.between(fromA, toA, (pos, _to, m) => {
+            if (pos < toA) removed.push(m.eol);
+          });
+        }
+        for (const eol of removed) counts[eol]--;
+        let def = null;
+        let pos = fromB;
+        for (let i = 1; i < inserted.lines; i++) {
+          pos += inserted.line(i).length;
+          const eol =
+            removed[i - 1] ?? (def ??= defaultEolAt(oldDoc, oldSet, fromA, fallback));
+          adds.push(eolMarkers[eol].range(pos));
+          counts[eol]++;
+          pos += 1;
+        }
+      });
+      set = set.map(tr.changes);
+      if (adds.length) set = set.update({ add: adds, sort: true });
+      changed = true;
+    }
+    for (const e of tr.effects) {
+      if (e.is(setAllLineEndings)) {
+        ({ set, counts } = buildUniform(tr.state.doc, e.value));
+        fallback = e.value;
+        changed = true;
+      } else if (e.is(restoreLineEnding)) {
+        const { pos, eol } = e.value;
+        const doc = tr.state.doc;
+        if (pos >= doc.length || doc.lineAt(pos).to !== pos) continue; // そこに改行がなければ無視
+        const prev = markerAt(set, pos);
+        if (prev === eol) continue;
+        if (!changed) counts = { ...counts };
+        if (prev) counts[prev]--;
+        counts[eol]++;
+        set = set.update({
+          filter: (from) => from !== pos,
+          filterFrom: pos,
+          filterTo: pos,
+          add: [eolMarkers[eol].range(pos)],
+        });
+        changed = true;
+      }
+    }
+    return changed ? { set, counts, fallback } : value;
+  },
+});
+
+// undo 用: 変更で消える改行の改行コードを記録し、取り消し時に復元する
+const eolHistory = invertedEffects.of((tr) => {
+  if (!tr.docChanged) return [];
+  const { set } = tr.startState.field(eolField);
+  const effects = [];
+  tr.changes.iterChanges((fromA, toA) => {
+    if (toA <= fromA) return;
+    set.between(fromA, toA, (pos, _to, m) => {
+      if (pos < toA) effects.push(restoreLineEnding.of({ pos, eol: m.eol }));
+    });
+  });
+  return effects;
+});
+
+// 保存用: 各行の改行コードを復元したテキスト。override を渡すと全行その改行コードにする
+export function docWithLineEndings(state, override = null) {
+  const doc = state.doc;
+  const { set, fallback } = state.field(eolField);
+  const it = set.iter();
+  const out = [];
+  for (let i = 1; i < doc.lines; i++) {
+    const line = doc.line(i);
+    while (it.value && it.from < line.to) it.next();
+    let eol = fallback;
+    if (it.value && it.from === line.to) {
+      eol = it.value.eol;
+      it.next();
+    }
+    out.push(line.text, EOL_CHARS[override ?? eol]);
+  }
+  out.push(doc.line(doc.lines).text);
+  return out.join("");
+}
+
+// { counts, dominant, mixed }。dominant は最多の改行コード(改行がなければ fallback)
+export function lineEndingSummary(state) {
+  const { counts, fallback } = state.field(eolField);
+  const present = EOL_KINDS.filter((k) => counts[k] > 0);
+  const dominant = present.length
+    ? present.reduce((a, b) => (counts[b] > counts[a] ? b : a))
+    : fallback;
+  return { counts, dominant, mixed: present.length > 1 };
+}
+
+// ステータスバー用ラベル: "LF" / "混在 (CRLF 12, LF 3)"
+export function describeLineEndings(state) {
+  const { counts, dominant, mixed } = lineEndingSummary(state);
+  if (!mixed) return dominant;
+  const parts = EOL_KINDS.filter((k) => counts[k] > 0)
+    .sort((a, b) => counts[b] - counts[a])
+    .map((k) => `${k} ${counts[k]}`);
+  return `混在 (${parts.join(", ")})`;
+}
+
+// --- 空白文字・改行の可視化 ---
+// 行末記号(サクラエディタ等の慣例: LF ↓ / CR ← / CRLF ↵)
+export const EOL_GLYPHS = { LF: "↓", CR: "←", CRLF: "↵" };
+
+class EolWidget extends WidgetType {
+  constructor(lineEnding) {
+    super();
+    this.lineEnding = lineEnding;
+  }
+  eq(other) {
+    return other.lineEnding === this.lineEnding;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "mm-ws-eol";
+    span.textContent = EOL_GLYPHS[this.lineEnding];
+    span.title = this.lineEnding;
+    return span;
+  }
+}
+
+const eolWidgets = {};
+for (const eol of EOL_KINDS) {
+  eolWidgets[eol] = Decoration.widget({ widget: new EolWidget(eol), side: 1 });
+}
+
+// ranges(表示範囲)に含まれる改行マーカーの位置に、その改行コードの記号を置く。
+// 最終行は後ろに改行がないので付かない(= 末尾改行の有無も見て分かる)
+export function eolDecorations(set, ranges) {
+  const builder = new RangeSetBuilder();
+  let last = -1;
+  for (const { from, to } of ranges) {
+    set.between(from, to, (pos, _to, m) => {
+      if (pos > last) {
+        builder.add(pos, pos, eolWidgets[m.eol]);
+        last = pos;
+      }
+    });
+  }
+  return builder.finish();
+}
+
+const eolPlugin = ViewPlugin.fromClass(
+  class {
+    constructor(view) {
+      this.decorations = this.build(view);
+    }
+    build(view) {
+      return eolDecorations(view.state.field(eolField).set, view.visibleRanges);
+    }
+    update(u) {
+      if (
+        u.docChanged ||
+        u.viewportChanged ||
+        u.state.field(eolField) !== u.startState.field(eolField)
+      ) {
+        this.decorations = this.build(u.view);
+      }
+    }
+  },
+  { decorations: (v) => v.decorations }
+);
+
+// 空白 1 文字ごとに種類別のクラスを付ける(見た目は style.css の .mm-ws-*)。
+// 連続した空白をまとめず 1 文字ずつにするのは、シンタックスハイライトの
+// トークン境界で span が分割されても表示が崩れないようにするため
+const wsDecos = {
+  " ": Decoration.mark({ class: "mm-ws-space" }),
+  "\t": Decoration.mark({ class: "mm-ws-tab" }),
+  "\u00a0": Decoration.mark({ class: "mm-ws-nbsp" }),
+  "\u3000": Decoration.mark({ class: "mm-ws-ideo" }),
+};
+const wsMatcher = new MatchDecorator({
+  regexp: /[ \t\u00a0\u3000]/g,
+  decoration: (m) => wsDecos[m[0]],
+});
+const wsPlugin = ViewPlugin.fromClass(
+  class {
+    constructor(view) {
+      this.decorations = wsMatcher.createDeco(view);
+    }
+    update(u) {
+      this.decorations = wsMatcher.updateDeco(u, this.decorations);
+    }
+  },
+  { decorations: (v) => v.decorations }
+);
+
+const whitespaceExtension = [wsPlugin, eolPlugin];
+const whitespaceCompartment = new Compartment();
+let showWhitespace = true;
+
+// 表示切替: 新規タブ用の既定値を更新し、既存 state 向け reconfigure エフェクトのファクトリを返す
+export function setShowWhitespace(show) {
+  showWhitespace = show;
+  return () => whitespaceCompartment.reconfigure(show ? whitespaceExtension : []);
+}
+
 // エディタ拡張一式。dirty 通知用の onChange を受け取る
 export function baseExtensions(onChange) {
   return [
@@ -290,10 +610,20 @@ export function baseExtensions(onChange) {
     highlightSelectionMatches(),
     search({ top: true, createPanel: createSearchPanel }),
     indentUnit.of("    "),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+    keymap.of([
+      ...defaultKeymap,
+      ...historyKeymap,
+      ...searchKeymap,
+      // 既定では Tab はフォーカス移動。タブ文字を入力できるようにする
+      // (選択範囲があればインデント、Shift+Tab でインデント解除)
+      { key: "Tab", run: insertTab, shift: indentLess },
+    ]),
     themeCompartment.of(cmThemes[editorDark ? "dark" : "light"]),
     japanesePhrases,
     jumpHighlightField,
+    eolField,
+    eolHistory,
+    whitespaceCompartment.of(showWhitespace ? whitespaceExtension : []),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) onChange();
       if (u.docChanged || u.selectionSet) {
@@ -303,8 +633,13 @@ export function baseExtensions(onChange) {
   ];
 }
 
-export function createEditorState(doc, onChange) {
-  return EditorState.create({ doc, extensions: baseExtensions(onChange) });
+// raw は改行コード混在可の生テキスト。改行はマーカーに分離して eolField の初期値にする
+export function createEditorState(raw, onChange) {
+  const { doc, eol } = parseDocument(raw);
+  return EditorState.create({
+    doc,
+    extensions: [baseExtensions(onChange), eolField.init(() => eol)],
+  });
 }
 
 export function createView(parent, state) {

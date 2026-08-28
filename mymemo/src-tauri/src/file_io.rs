@@ -2,11 +2,12 @@ use encoding_rs::{Encoding, EUC_JP, SHIFT_JIS, UTF_8};
 use serde::Serialize;
 use std::fs;
 
+// content は改行コードを正規化しない生テキスト。改行コード(行ごとの LF/CR/CRLF)は
+// フロントエンド側で分離・保持し、保存時も復元済みのテキストを受け取ってそのまま書く
 #[derive(Serialize)]
 pub struct FileContent {
     pub content: String,
     pub encoding: String,
-    pub line_ending: String,
     pub lossy: bool,
 }
 
@@ -24,20 +25,6 @@ fn display_name(enc: &'static Encoding) -> String {
         "Shift_JIS" => "CP932".to_string(),
         name => name.to_string(),
     }
-}
-
-fn detect_line_ending(text: &str) -> &'static str {
-    if text.contains("\r\n") {
-        "CRLF"
-    } else if text.contains('\r') {
-        "CR"
-    } else {
-        "LF"
-    }
-}
-
-fn normalize_newlines(text: &str) -> String {
-    text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
 // BOM → UTF-8 → CP932 → EUC-JP の順で自動判定してデコードする。
@@ -87,40 +74,22 @@ fn read_file_impl(path: String, encoding: Option<String>) -> Result<FileContent,
         decode_auto(bytes)
     };
 
-    let line_ending = detect_line_ending(&text);
     Ok(FileContent {
-        content: normalize_newlines(&text),
+        content: text,
         encoding: display_name(enc),
-        line_ending: line_ending.to_string(),
         lossy,
     })
 }
 
+// content は改行コードを含めて完成したテキスト(変換しない)
 #[tauri::command]
-pub async fn write_file(
-    path: String,
-    content: String,
-    encoding: String,
-    line_ending: String,
-) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        write_file_impl(path, content, encoding, line_ending)
-    })
-    .await
-    .map_err(|e| format!("保存スレッドエラー: {e}"))?
+pub async fn write_file(path: String, content: String, encoding: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || write_file_impl(path, content, encoding))
+        .await
+        .map_err(|e| format!("保存スレッドエラー: {e}"))?
 }
 
-fn write_file_impl(
-    path: String,
-    content: String,
-    encoding: String,
-    line_ending: String,
-) -> Result<(), String> {
-    let text = match line_ending.as_str() {
-        "CRLF" => content.replace('\n', "\r\n"),
-        "CR" => content.replace('\n', "\r"),
-        _ => content,
-    };
+fn write_file_impl(path: String, text: String, encoding: String) -> Result<(), String> {
     let enc = encoding_for(&encoding)?;
     let bytes: Vec<u8> = if enc.name().starts_with("UTF-16") {
         // encoding_rs は UTF-16 エンコード非対応のため手動で変換(BOM 付き)
@@ -165,7 +134,6 @@ mod tests {
         let r = read_file_impl(path, None).unwrap();
         assert_eq!(r.content, "こんにちは\n");
         assert_eq!(r.encoding, "UTF-8");
-        assert_eq!(r.line_ending, "LF");
         assert!(!r.lossy);
     }
 
@@ -208,36 +176,26 @@ mod tests {
     }
 
     #[test]
-    fn read_detects_crlf_and_normalizes() {
+    fn read_keeps_mixed_line_endings_verbatim() {
         let dir = tempdir().unwrap();
-        let path = write_bytes(&dir, "crlf.txt", b"a\r\nb\r\n");
+        let path = write_bytes(&dir, "mixed.txt", b"a\r\nb\rc\nd");
         let r = read_file_impl(path, None).unwrap();
-        assert_eq!(r.line_ending, "CRLF");
-        assert_eq!(r.content, "a\nb\n");
+        assert_eq!(r.content, "a\r\nb\rc\nd");
     }
 
     #[test]
-    fn read_detects_cr_only() {
-        let dir = tempdir().unwrap();
-        let path = write_bytes(&dir, "cr.txt", b"a\rb");
-        let r = read_file_impl(path, None).unwrap();
-        assert_eq!(r.line_ending, "CR");
-        assert_eq!(r.content, "a\nb");
-    }
-
-    #[test]
-    fn write_crlf_restores_line_endings() {
+    fn write_keeps_line_endings_verbatim() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("out.txt").to_string_lossy().into_owned();
-        write_file_impl(path.clone(), "a\nb".into(), "UTF-8".into(), "CRLF".into()).unwrap();
-        assert_eq!(fs::read(&path).unwrap(), b"a\r\nb");
+        write_file_impl(path.clone(), "a\r\nb\rc\n".into(), "UTF-8".into()).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"a\r\nb\rc\n");
     }
 
     #[test]
     fn write_cp932_round_trip() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("out.txt").to_string_lossy().into_owned();
-        write_file_impl(path.clone(), "日本語".into(), "CP932".into(), "LF".into()).unwrap();
+        write_file_impl(path.clone(), "日本語".into(), "CP932".into()).unwrap();
         let r = read_file_impl(path, Some("CP932".to_string())).unwrap();
         assert_eq!(r.content, "日本語");
     }
@@ -246,7 +204,7 @@ mod tests {
     fn write_utf16le_has_bom_and_round_trips() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("out.txt").to_string_lossy().into_owned();
-        write_file_impl(path.clone(), "あA".into(), "UTF-16LE".into(), "LF".into()).unwrap();
+        write_file_impl(path.clone(), "あA".into(), "UTF-16LE".into()).unwrap();
         let bytes = fs::read(&path).unwrap();
         assert_eq!(&bytes[..2], &[0xFF, 0xFE]);
         let r = read_file_impl(path, None).unwrap(); // BOM から自動判定される
@@ -257,7 +215,7 @@ mod tests {
     fn write_unencodable_char_is_error() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("out.txt").to_string_lossy().into_owned();
-        let err = write_file_impl(path.clone(), "🍣".into(), "CP932".into(), "LF".into());
+        let err = write_file_impl(path.clone(), "🍣".into(), "CP932".into());
         assert!(err.is_err());
         assert!(!dir.path().join("out.txt").exists()); // エラー時はファイルを作らない
     }

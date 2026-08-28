@@ -48,6 +48,7 @@
   --ed-selection-match: #99ff7780;
   --ed-matching-bracket: #328c8252;
   --ed-jump-line: rgba(232, 183, 80, 0.35);
+  --ed-whitespace: #5c5c5c;    /* 空白文字・改行記号 */
 
   /* シンタックスハイライト */
   --syn-keyword: #c586c0;
@@ -105,6 +106,7 @@ html[data-theme="light"] {
   --ed-selection-match: #99dd9977;
   --ed-matching-bracket: #2e8c8240;
   --ed-jump-line: rgba(212, 158, 40, 0.35);
+  --ed-whitespace: #b4b4b4;
 
   /* シンタックスハイライト */
   --syn-keyword: #af00db;
@@ -164,6 +166,7 @@ html[data-theme="solarized-dark"] {
   --ed-selection-match: #85990040; /* green */
   --ed-matching-bracket: #2aa19855; /* cyan */
   --ed-jump-line: rgba(181, 137, 0, 0.35);
+  --ed-whitespace: #4b626a;
 
   /* シンタックスハイライト(公式 Solarized アクセント) */
   --syn-keyword: #859900;   /* green */
@@ -221,6 +224,7 @@ html[data-theme="solarized-light"] {
   --ed-selection-match: #85990035; /* green */
   --ed-matching-bracket: #2aa19845; /* cyan */
   --ed-jump-line: rgba(181, 137, 0, 0.3);
+  --ed-whitespace: #b3bdb9;
 
   /* シンタックスハイライト(公式 Solarized アクセント。ベーストーン系のみ dark と反転) */
   --syn-keyword: #859900;   /* green */

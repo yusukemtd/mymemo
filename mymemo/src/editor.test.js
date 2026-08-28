@@ -38,3 +38,33 @@ describe("detectLanguage", () => {
     expect(detectLanguage("tool.rs", "#!/usr/bin/env python3")?.name).toBe("Rust");
   });
 });
+
+describe("Tab キー", () => {
+  const press = (view, opts) =>
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true, ...opts })
+    );
+
+  it("Tab でタブ文字が挿入される(フォーカス移動しない)", async () => {
+    const { EditorView } = await import("@codemirror/view");
+    const { createEditorState } = await import("./editor.js");
+    const view = new EditorView({ state: createEditorState("ab", () => {}), parent: document.body });
+    view.dispatch({ selection: { anchor: 1 } });
+    const notDefaultPrevented = press(view, {});
+    expect(notDefaultPrevented).toBe(false); // preventDefault された = エディタが処理した
+    expect(view.state.doc.toString()).toBe("a\tb");
+    view.destroy();
+  });
+
+  it("選択範囲があれば Tab で行がインデントされ、Shift+Tab で戻る", async () => {
+    const { EditorView } = await import("@codemirror/view");
+    const { createEditorState } = await import("./editor.js");
+    const view = new EditorView({ state: createEditorState("a\nb", () => {}), parent: document.body });
+    view.dispatch({ selection: { anchor: 0, head: 3 } });
+    press(view, {});
+    expect(view.state.doc.toString()).toBe("    a\n    b");
+    press(view, { shiftKey: true });
+    expect(view.state.doc.toString()).toBe("a\nb");
+    view.destroy();
+  });
+});

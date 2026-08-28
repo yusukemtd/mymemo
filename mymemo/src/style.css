@@ -115,6 +115,57 @@ body,
   outline: none;
 }
 
+/* --- 空白文字・改行の可視化(editor.js の .mm-ws-* 装飾) ---
+   半角スペース: 中点 / NBSP: 中点+枠(警告色) / 全角スペース: 枠 /
+   タブ: 右向き矢印 / 行末: 改行コード別の記号(LF ↓ / CR ← / CRLF ↵) */
+.mm-ws-space,
+.mm-ws-nbsp {
+  background-image: radial-gradient(
+    circle at 50% 55%,
+    var(--ed-whitespace) 20%,
+    transparent 20%
+  );
+  background-position: center;
+}
+
+.mm-ws-nbsp {
+  background-image: radial-gradient(
+    circle at 50% 55%,
+    var(--warning) 20%,
+    transparent 20%
+  );
+  box-shadow: inset 0 0 0 1px var(--warning);
+}
+
+.mm-ws-ideo {
+  box-shadow: inset 0 0 0 1px var(--ed-whitespace);
+}
+
+/* タブ幅(1〜tabSize 文字分)に合わせて矢印を右寄せで描く。
+   文字ではなくマスク画像にすることで色をテーマトークンに追従させる */
+.mm-ws-tab {
+  position: relative;
+}
+
+.mm-ws-tab::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--ed-whitespace);
+  -webkit-mask: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="20"><path stroke="black" stroke-width="1.5" fill="none" d="M1 10H196L190 5M190 15L196 10M197 4L197 16"/></svg>')
+    no-repeat right 50% / auto 100%;
+  mask: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="20"><path stroke="black" stroke-width="1.5" fill="none" d="M1 10H196L190 5M190 15L196 10M197 4L197 16"/></svg>')
+    no-repeat right 50% / auto 100%;
+}
+
+.mm-ws-eol {
+  color: var(--ed-whitespace);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* --- grep panel --- */
 #grep-panel {
   flex-shrink: 0;
