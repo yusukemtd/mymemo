@@ -94,7 +94,7 @@ describe("restoreSession", () => {
     const { tabs, session } = await load({ initialTab: false });
     const readFile = vi.fn(async (path, encoding) => {
       if (path === "/gone.txt") throw new Error("no such file");
-      return { content: `content of ${path}`, encoding };
+      return { content: `content of ${path}`, encoding: encoding ?? "CP932" }; // null = 自動判定
     });
     const n = await session.restoreSession(readFile, {
       version: 1,
@@ -114,7 +114,7 @@ describe("restoreSession", () => {
     expect(tabs.getActiveTab()).toBe(list[1]);
     expect(tabs.stateOf(list[0]).selection.main.head).toBe(3);
     expect(tabs.stateOf(list[1]).selection.main.head).toBe(2); // 本文長で丸める
-    expect(readFile).toHaveBeenCalledWith("/a.txt", "CP932");
+    expect(readFile).toHaveBeenCalledWith("/a.txt", null); // 保存された文字コードでは読み直さない(自動判定)
   });
 
   it("セッションが無ければ何もしない", async () => {

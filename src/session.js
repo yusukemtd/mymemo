@@ -83,7 +83,9 @@ export function loadSession() {
 }
 
 // 保存されたセッションからタブを作り直し、復元したタブ数を返す。
-// readFile(path, encoding) は { content, encoding } を返す関数(読めないファイルは黙って飛ばす)
+// readFile(path, encoding) は { content, encoding } を返す関数(読めないファイルは黙って飛ばす)。
+// 文字コードは自動判定で読む(保存された encoding は「文字コードを変換」で保存前に変えた値かもしれず、
+// それで読み直すと文字化けするため使わない)
 export async function restoreSession(readFile, session = loadSession()) {
   if (!session || !session.tabs.length) return 0;
   const restored = [];
@@ -93,7 +95,7 @@ export async function restoreSession(readFile, session = loadSession()) {
     if (entry.path) {
       let file;
       try {
-        file = await readFile(entry.path, entry.encoding);
+        file = await readFile(entry.path, null);
       } catch {
         continue;
       }
