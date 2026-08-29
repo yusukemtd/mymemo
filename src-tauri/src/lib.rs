@@ -5,7 +5,7 @@ mod open_files;
 
 use tauri::menu::{
     AboutMetadataBuilder, CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder,
-    PredefinedMenuItem, SubmenuBuilder,
+    PredefinedMenuItem, Submenu, SubmenuBuilder,
 };
 use tauri::{Emitter, Manager};
 
@@ -60,6 +60,50 @@ fn set_line_wrap(item: tauri::State<WrapMenuItem>, wrap: bool) -> Result<(), Str
     item.0.set_checked(wrap).map_err(|e| e.to_string())
 }
 
+// 「ファイル > 最近使ったファイルを開く」のサブメニュー(項目はフロントエンドの履歴から都度作り直す)
+struct RecentMenu(Submenu<tauri::Wry>);
+
+// メニュー表示用にホームディレクトリを ~ に置き換える
+fn display_path(path: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() && path.starts_with(&home) => {
+            format!("~{}", &path[home.len()..])
+        }
+        _ => path.to_string(),
+    }
+}
+
+// 履歴が変わったときにフロントエンドから呼ばれる。項目 ID は "recent:<index>"(index は paths の並び)
+#[tauri::command]
+fn set_recent_files(
+    app: tauri::AppHandle,
+    menu: tauri::State<RecentMenu>,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    let sub = &menu.0;
+    let err = |e: tauri::Error| e.to_string();
+    while sub.remove_at(0).map_err(err)?.is_some() {}
+    if paths.is_empty() {
+        let none = MenuItemBuilder::with_id("recent_none", "(なし)")
+            .enabled(false)
+            .build(&app)
+            .map_err(err)?;
+        return sub.append(&none).map_err(err);
+    }
+    for (i, path) in paths.iter().enumerate() {
+        let item = MenuItemBuilder::with_id(format!("recent:{i}"), display_path(path))
+            .build(&app)
+            .map_err(err)?;
+        sub.append(&item).map_err(err)?;
+    }
+    sub.append(&PredefinedMenuItem::separator(&app).map_err(err)?)
+        .map_err(err)?;
+    let clear = MenuItemBuilder::with_id("recent_clear", "履歴を消去")
+        .build(&app)
+        .map_err(err)?;
+    sub.append(&clear).map_err(err)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -92,6 +136,16 @@ pub fn run() {
                 )
                 .build()?;
 
+            // 起動直後にフロントエンドの set_recent_files で保存済みの履歴に置き換わる
+            let recent_menu = SubmenuBuilder::new(app, "最近使ったファイルを開く")
+                .item(
+                    &MenuItemBuilder::with_id("recent_none", "(なし)")
+                        .enabled(false)
+                        .build(app)?,
+                )
+                .build()?;
+            app.manage(RecentMenu(recent_menu.clone()));
+
             let file_menu = SubmenuBuilder::new(app, "ファイル")
                 .item(
                     &MenuItemBuilder::with_id("new", "新規タブ")
@@ -113,6 +167,7 @@ pub fn run() {
                     }
                     enc_menu.build()?
                 })
+                .item(&recent_menu)
                 .separator()
                 .item(
                     &MenuItemBuilder::with_id("save", "保存")
@@ -256,6 +311,7 @@ pub fn run() {
             set_theme,
             set_show_whitespace,
             set_line_wrap,
+            set_recent_files,
             open_files::take_pending_open_files,
             grep::grep_search,
             file_io::read_file,
@@ -271,4 +327,16 @@ pub fn run() {
             tauri::RunEvent::Opened { urls } => open_files::handle_opened(app, urls),
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::display_path;
+
+    #[test]
+    fn display_path_はホームを_チルダに置き換える() {
+        let home = std::env::var("HOME").unwrap();
+        assert_eq!(display_path(&format!("{home}/notes/a.txt")), "~/notes/a.txt");
+        assert_eq!(display_path("/tmp/a.txt"), "/tmp/a.txt");
+    }
 }

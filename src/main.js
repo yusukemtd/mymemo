@@ -16,6 +16,13 @@ import { initLineWrap, toggleLineWrap } from "./wrap.js";
 import { initFontSize, zoomIn, zoomOut, resetFontSize } from "./fontsize.js";
 import { initGrep, toggleGrep } from "./grep.js";
 import { saveSession, scheduleSaveSession, restoreSession } from "./session.js";
+import {
+  initRecentFiles,
+  addRecentFile,
+  removeRecentFile,
+  clearRecentFiles,
+  getRecentFiles,
+} from "./recent.js";
 import { open, confirm, message } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -60,9 +67,11 @@ async function openFile(path = null, encoding = null) {
   try {
     file = await invoke("read_file", { path, encoding });
   } catch (err) {
+    removeRecentFile(path); // 開けなくなったファイルは履歴から外す
     await message(String(err), { title: "mymemo", kind: "error" });
     return;
   }
+  addRecentFile(path);
   if (file.lossy) {
     await message(
       `${file.encoding} として正しく読めない文字があり、置換されています。`,
@@ -119,6 +128,7 @@ async function saveFile(as = false) {
   // 統一を選んだ場合は保存に成功してからエディタ側の改行コードを揃える
   if (convertTo) Tabs.convertLineEndings(tab, convertTo);
   Tabs.markSaved(tab, path);
+  addRecentFile(path);
   return true;
 }
 
@@ -189,10 +199,18 @@ document.getElementById("tabbar").addEventListener("tab-close-request", (e) => {
   Tabs.closeTab(e.detail, confirmDiscard);
 });
 
+// --- 最近使ったファイル(メニュー項目は Rust 側が履歴から作り直す) ---
+initRecentFiles();
+
 // --- メニュー(日本語ネイティブメニューは Rust 側で定義)からのイベント ---
 listen("menu", async ({ payload }) => {
   if (payload.startsWith("open_enc:")) {
     await openFile(null, payload.slice("open_enc:".length));
+    return;
+  }
+  if (payload.startsWith("recent:")) {
+    const path = getRecentFiles()[Number(payload.slice("recent:".length))];
+    if (path) await openFile(path);
     return;
   }
   if (payload.startsWith("theme:")) {
@@ -217,6 +235,9 @@ listen("menu", async ({ payload }) => {
       break;
     case "save_as":
       await saveFile(true);
+      break;
+    case "recent_clear":
+      clearRecentFiles();
       break;
     case "close_tab":
       await Tabs.closeTab(
