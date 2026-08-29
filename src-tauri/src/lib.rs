@@ -247,6 +247,20 @@ pub fn run() {
                     eol_menu.build()?
                 })
                 .item(&indent_menu)
+                .separator()
+                .item(&{
+                    // 行単位の変換。フロントの transform.js が選択範囲(無ければ全文)に適用する
+                    let mut sub = SubmenuBuilder::new(app, "テキスト変換");
+                    for (id, label) in [
+                        ("transform:sort_asc", "行を昇順にソート"),
+                        ("transform:sort_desc", "行を降順にソート"),
+                        ("transform:unique", "重複する行を削除"),
+                        ("transform:remove_blank", "空行を削除"),
+                    ] {
+                        sub = sub.item(&MenuItemBuilder::with_id(id, label).build(app)?);
+                    }
+                    sub.build()?
+                })
                 .build()?;
 
             let search_menu = SubmenuBuilder::new(app, "検索")

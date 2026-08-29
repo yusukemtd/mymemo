@@ -24,6 +24,7 @@ import {
 import { initGrep, toggleGrep } from "./grep.js";
 import { saveSession, scheduleSaveSession, restoreSession } from "./session.js";
 import { checkExternalChanges, needsOverwriteConfirm, reloadTab } from "./external.js";
+import { applyLineTransform } from "./transform.js";
 import {
   initRecentFiles,
   addRecentFile,
@@ -274,6 +275,11 @@ initRecentFiles();
 listen("menu", async ({ payload }) => {
   if (payload.startsWith("open_enc:")) {
     await openFile(null, payload.slice("open_enc:".length));
+    return;
+  }
+  if (payload.startsWith("transform:")) {
+    applyLineTransform(view, payload.slice("transform:".length));
+    view.focus();
     return;
   }
   if (payload.startsWith("tabsize:")) {
