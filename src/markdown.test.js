@@ -233,3 +233,40 @@ describe("チェックボックスの切替(toggleCheckbox)", () => {
     m.view.destroy();
   });
 });
+
+describe("URL の貼り付けでリンク化(pasteURLAsLink)", () => {
+  const paste = (view, text) => {
+    const ev = new Event("paste", { bubbles: true, cancelable: true });
+    ev.clipboardData = { getData: () => text };
+    view.contentDOM.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  };
+
+  it("テキストを選んで URL を貼ると [テキスト](URL) になる(www. は https:// を補う)", async () => {
+    const view = await markdownView("see docs here");
+    view.dispatch({ selection: { anchor: 4, head: 8 } });
+    expect(paste(view, "https://x.test/p")).toBe(true);
+    expect(view.state.doc.toString()).toBe("see [docs](https://x.test/p) here");
+    view.dispatch({ selection: { anchor: 29, head: 33 } });
+    paste(view, "www.x.test");
+    expect(view.state.doc.toString()).toBe("see [docs](https://x.test/p) [here](https://www.x.test)");
+    view.destroy();
+  });
+
+  it("選択が無い・URL でない・Markdown 以外のタブでは通常の貼り付けになる", async () => {
+    // CodeMirror 自身が paste を処理する(preventDefault する)ので、本文の結果で判定する
+    const view = await markdownView("abc");
+    view.dispatch({ selection: { anchor: 1 } });
+    paste(view, "https://x.test/");
+    expect(view.state.doc.toString()).toBe("ahttps://x.test/bc");
+    view.dispatch({ selection: { anchor: 0, head: 1 } });
+    paste(view, "plain text");
+    expect(view.state.doc.toString()).toBe("plain texthttps://x.test/bc");
+    view.destroy();
+    const plain = new EditorView({ state: createEditorState("abc", () => {}), parent: document.body });
+    plain.dispatch({ selection: { anchor: 0, head: 3 } });
+    paste(plain, "https://x.test/");
+    expect(plain.state.doc.toString()).toBe("https://x.test/");
+    plain.destroy();
+  });
+});
