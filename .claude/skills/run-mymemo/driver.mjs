@@ -201,8 +201,7 @@ function mockInit() {
           emit(args.event, args.payload);
           return;
         case "set_theme":
-        case "set_show_whitespace":
-        case "set_line_wrap":
+        case "set_toggle":
         case "set_recent_files":
         case "set_indent":
         case "popup_status_menu":

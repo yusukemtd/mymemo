@@ -7,6 +7,7 @@ use tauri::menu::{
     AboutMetadataBuilder, CheckMenuItem, CheckMenuItemBuilder, ContextMenu, MenuBuilder,
     MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder,
 };
+use std::collections::HashMap;
 use tauri::{Emitter, Manager};
 
 // 最後のタブを閉じたときにフロントエンドから呼ばれる
@@ -39,16 +40,14 @@ fn set_theme(
     Ok(())
 }
 
-// 「表示 > 空白文字・改行を表示」の CheckMenuItem ハンドル(チェック状態の同期用)
-struct WhitespaceMenuItem(CheckMenuItem<tauri::Wry>);
+// 表示・編集の ON/OFF 設定(空白文字表示・折り返しなど)の CheckMenuItem。メニュー項目 ID で引く
+struct ToggleMenuItems(HashMap<String, CheckMenuItem<tauri::Wry>>);
 
-// 表示切替の確定時にフロントエンドから呼ばれる(起動時の保存値復元も含む)
+// 設定の確定時にフロントエンド(toggles.js)から呼ばれる(起動時の保存値復元も含む)
 #[tauri::command]
-fn set_show_whitespace(
-    item: tauri::State<WhitespaceMenuItem>,
-    show: bool,
-) -> Result<(), String> {
-    item.0.set_checked(show).map_err(|e| e.to_string())
+fn set_toggle(items: tauri::State<ToggleMenuItems>, id: String, on: bool) -> Result<(), String> {
+    let item = items.0.get(&id).ok_or_else(|| format!("未知の設定: {id}"))?;
+    item.set_checked(on).map_err(|e| e.to_string())
 }
 
 // 「編集 > インデント」の CheckMenuItem ハンドル(タブ幅 2 / 4 / 8 とソフトタブ。チェック状態の同期用)
@@ -100,15 +99,6 @@ fn popup_status_menu(
         builder = builder.item(item);
     }
     builder.build().map_err(err)?.popup(window).map_err(err)
-}
-
-// 「表示 > 行を折り返す」の CheckMenuItem ハンドル(チェック状態の同期用)
-struct WrapMenuItem(CheckMenuItem<tauri::Wry>);
-
-// 折り返し切替の確定時にフロントエンドから呼ばれる(起動時の保存値復元も含む)
-#[tauri::command]
-fn set_line_wrap(item: tauri::State<WrapMenuItem>, wrap: bool) -> Result<(), String> {
-    item.0.set_checked(wrap).map_err(|e| e.to_string())
 }
 
 // 「ファイル > 最近使ったファイルを開く」のサブメニュー(項目はフロントエンドの履歴から都度作り直す)
@@ -343,15 +333,17 @@ pub fn run() {
             for item in &theme_items {
                 theme_sub = theme_sub.item(item);
             }
-            // 既定は表示。起動直後にフロントエンドの set_show_whitespace で保存値に同期される
-            let whitespace_item =
-                CheckMenuItemBuilder::with_id("toggle_whitespace", "空白文字・改行を表示")
-                    .checked(true)
+            // ON/OFF 設定の項目。checked は既定値で、起動直後にフロントエンドの set_toggle で保存値に同期される
+            let mut toggles = HashMap::new();
+            let mut toggle_item = |id: &str, label: &str, default: bool| {
+                let item = CheckMenuItemBuilder::with_id(id, label)
+                    .checked(default)
                     .build(app)?;
-            // 既定は折り返さない。起動直後にフロントエンドの set_line_wrap で保存値に同期される
-            let wrap_item = CheckMenuItemBuilder::with_id("toggle_wrap", "行を折り返す")
-                .checked(false)
-                .build(app)?;
+                toggles.insert(id.to_string(), item.clone());
+                tauri::Result::Ok(item)
+            };
+            let whitespace_item = toggle_item("toggle_whitespace", "空白文字・改行を表示", true)?;
+            let wrap_item = toggle_item("toggle_wrap", "行を折り返す", false)?;
             let view_menu = SubmenuBuilder::new(app, "表示")
                 .item(&theme_sub.build()?)
                 .separator()
@@ -375,8 +367,7 @@ pub fn run() {
                 )
                 .build()?;
             app.manage(ThemeMenuItems(theme_items));
-            app.manage(WhitespaceMenuItem(whitespace_item));
-            app.manage(WrapMenuItem(wrap_item));
+            app.manage(ToggleMenuItems(toggles));
 
             let window_menu = SubmenuBuilder::new(app, "ウインドウ")
                 .item(&PredefinedMenuItem::minimize(app, Some("しまう"))?)
@@ -405,8 +396,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             quit_app,
             set_theme,
-            set_show_whitespace,
-            set_line_wrap,
+            set_toggle,
             set_recent_files,
             set_indent,
             popup_status_menu,

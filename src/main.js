@@ -11,8 +11,7 @@ import {
 } from "./editor.js";
 import * as Tabs from "./tabs.js";
 import { initTheme, applyTheme } from "./theme.js";
-import { initShowWhitespace, toggleShowWhitespace } from "./whitespace.js";
-import { initLineWrap, toggleLineWrap } from "./wrap.js";
+import { showWhitespace, lineWrap, TOGGLES } from "./toggles.js";
 import { initFontSize, zoomIn, zoomOut, resetFontSize } from "./fontsize.js";
 import {
   initIndent,
@@ -40,8 +39,8 @@ import { listen } from "@tauri-apps/api/event";
 
 // --- 起動 ---
 initTheme(); // エディタ生成前に呼ぶ(初期 state のテーマ極性が決まる)
-initShowWhitespace(); // 同上(初期 state の空白文字表示の有無が決まる)
-initLineWrap(); // 同上(初期 state の折り返しの有無が決まる)
+showWhitespace.init(); // 同上(初期 state の空白文字表示の有無が決まる)
+lineWrap.init(); // 同上(初期 state の折り返しの有無が決まる)
 initIndent(); // 同上(判定できないファイルのインデント既定値が決まる)
 const container = document.getElementById("editor-container");
 const view = createView(container, createEditorState("", () => {}));
@@ -290,6 +289,11 @@ listen("menu", async ({ payload }) => {
     await openFile(null, payload.slice("open_enc:".length));
     return;
   }
+  if (payload in TOGGLES) {
+    // 表示・編集の ON/OFF 設定(空白文字表示・折り返しなど)
+    TOGGLES[payload].toggle();
+    return;
+  }
   if (payload.startsWith("transform:")) {
     applyLineTransform(view, payload.slice("transform:".length));
     view.focus();
@@ -360,12 +364,6 @@ listen("menu", async ({ payload }) => {
       break;
     case "goto_line":
       gotoLine(view); // CodeMirror 標準の行番号入力パネル(文言は japanesePhrases で日本語化済み)
-      break;
-    case "toggle_whitespace":
-      toggleShowWhitespace();
-      break;
-    case "toggle_wrap":
-      toggleLineWrap();
       break;
     case "zoom_in":
       zoomIn();
