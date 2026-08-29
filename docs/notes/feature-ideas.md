@@ -75,7 +75,7 @@ grep の絞り込み・置換(`grep.rs`)→ Markdown 入力支援(`markdownExtra
 | 機能 | 備考 |
 | --- | --- |
 | ウィンドウの位置・サイズの復元 | `tauri-plugin-window-state` を追加すれば数行。自前なら `onResized`/`onMoved` を `localStorage` に |
-| ~~Markdown プレビュー~~ ✅ 2026-08-29 | `marked` を追加し、許可リスト方式の自前サニタイザ(`preview.js`)で script・イベント属性・`javascript:` を落とす。相対パス画像は asset プロトコル(`protocol-asset`)。書式ショートカット(`Cmd+B` 等、`markdown.js`)も追加 |
+| ~~Markdown プレビュー~~ ✅ 2026-08-29 | `marked` を追加し、許可リスト方式の自前サニタイザ(`preview.js`)で script・イベント属性・`javascript:` を落とす。ローカル画像(asset プロトコル)は不要と判断して非対応。書式ショートカット(`Cmd+B` 等、`markdown.js`)も追加 |
 | 分割表示(2 ペイン) | `EditorView` を 2 つ持ち、同じ `EditorState` の共有か別タブか設計が要る。`tabs.js` が単一 view 前提 |
 | 複数ウィンドウ | `tabs.js` の状態がモジュール変数なので大きめの改修 |
 | フォルダを開く(ファイルツリー) | サイドバー UI と Rust 側のディレクトリ走査。grep と組み合わせると「プロジェクト」化する |

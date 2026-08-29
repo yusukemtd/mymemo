@@ -1,5 +1,5 @@
 import { marked } from "marked";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 
 // Markdown プレビュー(表示 > Markdown プレビュー): アクティブタブの本文を marked で HTML にし、
 // 許可リスト方式でサニタイズしてからエディタの右に表示する。本文の変更は 150ms 遅らせて反映し、
@@ -18,11 +18,10 @@ const REMOVE_TAGS = new Set([
   "select", "svg", "math", "template", "noscript", "head", "title",
 ]);
 const SAFE_HREF = /^(https?:|mailto:|#)/i;
+// 画像は http(s) と data:image だけ(ローカルファイルの相対パスは asset プロトコルが要るので対応しない)
 const SAFE_SRC = /^(https?:|data:image\/)/i;
-const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
-// resolveSrc: 相対パスの画像を表示できる URL に変える(できなければ null で画像を外す)
-function sanitizeAttrs(el, tag, resolveSrc) {
+function sanitizeAttrs(el, tag) {
   const keep = {};
   const get = (name) => el.getAttribute(name)?.trim() ?? "";
   if (tag === "a") {
@@ -32,10 +31,6 @@ function sanitizeAttrs(el, tag, resolveSrc) {
   } else if (tag === "img") {
     const src = get("src");
     if (SAFE_SRC.test(src)) keep.src = src;
-    else if (src && !HAS_SCHEME.test(src) && !src.startsWith("/")) {
-      const resolved = resolveSrc(src);
-      if (resolved) keep.src = resolved;
-    }
     if (!keep.src) return false; // 表示できない画像は外す
     if (el.hasAttribute("alt")) keep.alt = get("alt");
     if (el.hasAttribute("title")) keep.title = get("title");
@@ -59,7 +54,7 @@ function sanitizeAttrs(el, tag, resolveSrc) {
   return true;
 }
 
-function walk(parent, resolveSrc) {
+function walk(parent) {
   for (const node of [...parent.childNodes]) {
     if (node.nodeType === Node.COMMENT_NODE) {
       node.remove();
@@ -72,26 +67,26 @@ function walk(parent, resolveSrc) {
       continue;
     }
     if (!ALLOWED_TAGS.has(tag)) {
-      walk(node, resolveSrc);
+      walk(node);
       node.replaceWith(...node.childNodes);
       continue;
     }
-    if (!sanitizeAttrs(node, tag, resolveSrc)) {
+    if (!sanitizeAttrs(node, tag)) {
       node.remove();
       continue;
     }
-    walk(node, resolveSrc);
+    walk(node);
   }
 }
 
-export function sanitizeHtml(html, { resolveSrc = () => null } = {}) {
+export function sanitizeHtml(html) {
   const doc = new DOMParser().parseFromString(`<!doctype html><body>${html}</body>`, "text/html");
-  walk(doc.body, resolveSrc);
+  walk(doc.body);
   return doc.body.innerHTML;
 }
 
-export function renderMarkdown(text, options) {
-  return sanitizeHtml(marked.parse(text), options);
+export function renderMarkdown(text) {
+  return sanitizeHtml(marked.parse(text));
 }
 
 // --- ペインの管理 ---
@@ -99,14 +94,12 @@ const UPDATE_DELAY = 150;
 let view = null;
 let pane = null;
 let area = null;
-let getActiveTab = null;
 let shown = false;
 let timer = null;
 let renderedDoc = null; // 最後に描画した Text(同じなら描画しない)
 
-export function initPreview(editorView, { activeTab }) {
+export function initPreview(editorView) {
   view = editorView;
-  getActiveTab = activeTab;
   pane = document.getElementById("preview");
   area = document.getElementById("editor-area");
   // リンクはページ遷移させず、http(s) / mailto だけ既定のブラウザで開く(# は何もしない)
@@ -145,12 +138,7 @@ function render() {
   const doc = view.state.doc;
   if (doc === renderedDoc) return;
   renderedDoc = doc;
-  const path = getActiveTab()?.path;
-  const dir = path ? path.slice(0, path.lastIndexOf("/") + 1) : null;
-  pane.innerHTML = renderMarkdown(doc.toString(), {
-    // 相対パスの画像はファイルのある場所からの相対とみなし、asset プロトコルで読む(無題タブでは表示しない)
-    resolveSrc: (src) => (dir ? convertFileSrc(dir + decodeURIComponent(src)) : null),
-  });
+  pane.innerHTML = renderMarkdown(doc.toString());
 }
 
 // 本文・タブが変わったときに呼ぶ(表示中だけ、150ms のデバウンスで描画)

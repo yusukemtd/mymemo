@@ -1,9 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(() => Promise.resolve()),
-  convertFileSrc: (p) => `asset://localhost${p}`,
-}));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(() => Promise.resolve()) }));
 
 import { sanitizeHtml, renderMarkdown } from "./preview.js";
 
@@ -46,12 +43,11 @@ describe("sanitizeHtml", () => {
     expect(sanitizeHtml('<ol start="3" reversed><li>a</li></ol>')).toBe('<ol start="3"><li>a</li></ol>');
   });
 
-  it("相対パスの画像は resolveSrc で解決し、解決できなければ外す。絶対パスとスキーム付きは通さない", () => {
-    const resolveSrc = (src) => `asset://localhost/dir/${src}`;
-    expect(sanitizeHtml('<img src="a b.png">', { resolveSrc })).toBe('<img src="asset://localhost/dir/a b.png">');
+  it("画像は http(s) と data:image だけ通し、相対パス・絶対パス・file: は外す", () => {
+    expect(sanitizeHtml('<img src="https://x.test/a.png">')).toBe('<img src="https://x.test/a.png">');
     expect(sanitizeHtml('<img src="a.png">')).toBe("");
-    expect(sanitizeHtml('<img src="/etc/x.png">', { resolveSrc })).toBe("");
-    expect(sanitizeHtml('<img src="file:///etc/x.png">', { resolveSrc })).toBe("");
+    expect(sanitizeHtml('<img src="/etc/x.png">')).toBe("");
+    expect(sanitizeHtml('<img src="file:///etc/x.png">')).toBe("");
   });
 });
 
@@ -65,8 +61,7 @@ describe("renderMarkdown", () => {
     expect(html).not.toContain("script");
   });
 
-  it("相対パスの画像はファイルの場所から解決される", () => {
-    const html = renderMarkdown("![p](img/a.png)", { resolveSrc: (s) => `asset://localhost/notes/${s}` });
-    expect(html).toBe('<p><img src="asset://localhost/notes/img/a.png" alt="p"></p>\n');
+  it("相対パスの画像は表示しない(alt も残さない)", () => {
+    expect(renderMarkdown("a ![p](img/a.png) b")).toBe("<p>a  b</p>\n");
   });
 });

@@ -62,7 +62,7 @@ const view = createView(container, createEditorState("", () => {}));
 Tabs.initTabs(view, { initialTab: false, onLastTabClosed: quitApp });
 
 // --- Markdown プレビュー(表示 > Markdown プレビュー)。本文・タブの変化に追従する ---
-initPreview(view, { activeTab: Tabs.getActiveTab });
+initPreview(view);
 markdownPreview.init();
 window.addEventListener("active-tab-changed", schedulePreviewUpdate);
 window.addEventListener("cursor-moved", schedulePreviewUpdate);
