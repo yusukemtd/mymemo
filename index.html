@@ -22,9 +22,12 @@
           <button id="grep-dir-btn" title="検索フォルダを選択">📁</button>
           <span id="grep-dir-label">フォルダ未選択</span>
           <input id="grep-input" type="text" placeholder="検索パターン" />
+          <input id="grep-glob" type="text" placeholder="ファイル名 (例: *.md !node_modules)" />
           <label><input id="grep-regex" type="checkbox" checked />正規表現</label>
           <label><input id="grep-case" type="checkbox" />大文字小文字</label>
           <button id="grep-run">検索</button>
+          <input id="grep-replace" type="text" placeholder="置換文字列" />
+          <button id="grep-replace-all" title="一致をすべて置換してファイルへ書き戻す(元に戻せない)">すべて置換</button>
           <span id="grep-status"></span>
           <button id="grep-close" title="閉じる">✕</button>
         </div>

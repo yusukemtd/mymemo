@@ -229,6 +229,7 @@ function mockInit() {
         case "write_file":
         case "file_mtime":
         case "grep_search":
+        case "grep_replace":
           return bridge(cmd, args);
         default:
           throw new Error(`mock: 未対応コマンド ${cmd}`);
@@ -282,17 +283,55 @@ function encode(content, encoding) {
   throw new Error(`mock: ${encoding} の書き込みは未対応(Rust 側の cargo test で確認すること)`);
 }
 
-async function grepDir(dir, re, hits, limit) {
+function grepRegExp(args) {
+  const src = args.isRegex ? args.pattern : args.pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(src, args.caseSensitive ? "" : "i");
+}
+
+// "*.md" "!skip.txt" "src/**/*.js" 形式の簡易 glob(ignore クレートの override に相当)。
+// "/" を含まないパターンはファイル名だけに、含むものはルートからの相対パスに当てる。後勝ち
+function globFilter(globs = []) {
+  const rules = globs.map((g) => {
+    const neg = g.startsWith("!");
+    const pat = neg ? g.slice(1) : g;
+    const src = pat
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*\*/g, "\0")
+      .replace(/\*/g, "[^/]*")
+      .replace(/\?/g, "[^/]")
+      .replace(/\0/g, ".*");
+    return { neg, re: new RegExp(`^${src}$`), anchored: pat.includes("/") };
+  });
+  const hasWhitelist = rules.some((r) => !r.neg);
+  return (rel) => {
+    let hit = null;
+    for (const r of rules) if (r.re.test(r.anchored ? rel : rel.split("/").pop())) hit = r;
+    return hit ? !hit.neg : !hasWhitelist;
+  };
+}
+
+async function collectFiles(root, dir, filter, out) {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  for (const e of entries) {
+    if ([".git", "node_modules", "target", "dist"].includes(e.name) || e.name.startsWith(".")) continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) await collectFiles(root, p, filter, out);
+    else if (e.isFile() && filter(path.relative(root, p))) out.push(p);
+  }
+}
+
+async function grepDir(dir, re, hits, limit, filter = () => true, root = dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const e of entries) {
     if ([".git", "node_modules", "target", "dist"].includes(e.name)) continue;
     const p = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (await grepDir(p, re, hits, limit)) return true;
+      if (await grepDir(p, re, hits, limit, filter, root)) return true;
       continue;
     }
-    if (!e.isFile()) continue;
+    if (!e.isFile() || !filter(path.relative(root, p))) continue;
     const text = new TextDecoder("utf-8").decode(await fs.readFile(p));
     const lines = text.split(/\r\n|\r|\n/);
     for (let i = 0; i < lines.length; i++) {
@@ -324,11 +363,32 @@ async function handleBridge(cmd, args) {
     case "file_mtime":
       return mtimeOf(args.path);
     case "grep_search": {
-      const src = args.isRegex ? args.pattern : args.pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp(src, args.caseSensitive ? "" : "i");
       const hits = [];
-      const truncated = await grepDir(args.dir, re, hits, 1000);
+      const truncated = await grepDir(args.dir, grepRegExp(args), hits, 1000, globFilter(args.globs), args.dir);
       return { hits, truncated };
+    }
+    case "grep_replace": {
+      // 簡易版: UTF-8 として読み書きし、JS の replace で置換する(文字コード保持は Rust 側の cargo test で確認)
+      const re = new RegExp(grepRegExp(args).source, (args.caseSensitive ? "" : "i") + "g");
+      const filter = globFilter(args.globs);
+      const paths = [];
+      await collectFiles(args.dir, args.dir, filter, paths);
+      let files = 0;
+      let replacements = 0;
+      for (const p of paths) {
+        const text = await fs.readFile(p, "utf8");
+        let n = 0;
+        const out = text.replace(re, (...m) => {
+          n++;
+          return args.isRegex ? args.replacement.replace(/\$(\d+|&)/g, (_, g) => (g === "&" ? m[0] : m[Number(g)] ?? "")) : args.replacement;
+        });
+        if (n) {
+          await fs.writeFile(p, out);
+          files++;
+          replacements += n;
+        }
+      }
+      return { files, replacements };
     }
   }
   throw new Error(`bridge: 未対応 ${cmd}`);

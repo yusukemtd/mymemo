@@ -369,6 +369,7 @@ pub fn run() {
             set_indent,
             open_files::take_pending_open_files,
             grep::grep_search,
+            grep::grep_replace,
             file_io::read_file,
             file_io::write_file,
             file_io::file_mtime,

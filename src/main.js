@@ -261,7 +261,8 @@ async function jumpTo(path, lineNumber) {
   };
 }
 
-initGrep(jumpTo);
+// grep の置換で書き換わったファイルは、ディスク上の変更検知と同じ経路で開いているタブへ反映する
+initGrep(jumpTo, { afterReplace: () => checkExternalChanges(externalDeps) });
 
 // タブの閉じるボタン
 document.getElementById("tabbar").addEventListener("tab-close-request", (e) => {

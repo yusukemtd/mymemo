@@ -114,7 +114,15 @@ pub async fn write_file(
 
 fn write_file_impl(path: String, text: String, encoding: String) -> Result<Option<u64>, String> {
     let enc = encoding_for(&encoding)?;
-    let bytes: Vec<u8> = if enc.name().starts_with("UTF-16") {
+    let bytes = encode_text(&text, enc)?;
+    fs::write(&path, bytes).map_err(|e| format!("保存エラー: {e}"))?;
+    Ok(mtime_of(&path))
+}
+
+// テキストを指定の文字コードのバイト列にする(grep の置換でも使う)。
+// UTF-16 は BOM 付き、UTF-8 は BOM なし。表現できない文字があればエラー
+pub(crate) fn encode_text(text: &str, enc: &'static Encoding) -> Result<Vec<u8>, String> {
+    if enc.name().starts_with("UTF-16") {
         // encoding_rs は UTF-16 エンコード非対応のため手動で変換(BOM 付き)
         let le = enc.name() == "UTF-16LE";
         let mut out = if le {
@@ -126,18 +134,16 @@ fn write_file_impl(path: String, text: String, encoding: String) -> Result<Optio
             let b = if le { u.to_le_bytes() } else { u.to_be_bytes() };
             out.extend_from_slice(&b);
         }
-        out
-    } else {
-        let (bytes, _, had_errors) = enc.encode(&text);
-        if had_errors {
-            return Err(format!(
-                "{encoding} で表現できない文字が含まれています"
-            ));
-        }
-        bytes.into_owned()
-    };
-    fs::write(&path, bytes).map_err(|e| format!("保存エラー: {e}"))?;
-    Ok(mtime_of(&path))
+        return Ok(out);
+    }
+    let (bytes, _, had_errors) = enc.encode(text);
+    if had_errors {
+        return Err(format!(
+            "{} で表現できない文字が含まれています",
+            display_name(enc)
+        ));
+    }
+    Ok(bytes.into_owned())
 }
 
 #[cfg(test)]
