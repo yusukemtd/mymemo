@@ -235,3 +235,47 @@ describe("lineEndingSummary / describeLineEndings", () => {
     expect(describeLineEndings(s)).toBe("混在 (CRLF 3, LF 1, CR 1)");
   });
 });
+
+describe("改行コードの変換(setAllLineEndings)", () => {
+  it("undo で行ごとの改行コードに戻り、redo で再び統一される", () => {
+    const { target, current } = withHistory(make("a\r\nb\rc\n"));
+    target.dispatch(current().update({ effects: setAllLineEndings.of("LF") }));
+    expect(docWithLineEndings(current())).toBe("a\nb\nc\n");
+    expect(undo(target)).toBe(true);
+    expect(docWithLineEndings(current())).toBe("a\r\nb\rc\n");
+    checkInvariants(current());
+    expect(redo(target)).toBe(true);
+    expect(docWithLineEndings(current())).toBe("a\nb\nc\n");
+    checkInvariants(current());
+  });
+
+  it("既に揃っていれば state は変わらず、undo 履歴にも残らない", () => {
+    const { target, current } = withHistory(make("a\nb\n"));
+    const before = current().field(eolField);
+    target.dispatch(current().update({ effects: setAllLineEndings.of("LF") }));
+    expect(current().field(eolField)).toBe(before);
+    expect(undo(target)).toBe(false);
+  });
+
+  it("改行のない文書では fallback が変わり、undo で元に戻る", () => {
+    const { target, current } = withHistory(make("abc"));
+    target.dispatch(current().update({ effects: setAllLineEndings.of("CRLF") }));
+    expect(undo(target)).toBe(true);
+    const s = apply(current(), { changes: { from: 3, insert: "\n" } });
+    expect(docWithLineEndings(s)).toBe("abc\n");
+  });
+
+  it("変換後に編集しても、undo を重ねれば変換前に戻る", () => {
+    const { target, current } = withHistory(make("a\r\nb\n"));
+    target.dispatch(current().update({ effects: setAllLineEndings.of("CR") }));
+    target.dispatch(current().update({ changes: { from: 0, insert: "X" }, userEvent: "input" })); // "Xa\rb\r"
+    expect(docWithLineEndings(current())).toBe("Xa\rb\r");
+    undo(target); // "a\rb\r"
+    undo(target); // "a\r\nb\n"
+    expect(docWithLineEndings(current())).toBe("a\r\nb\n");
+    checkInvariants(current());
+    redo(target);
+    expect(docWithLineEndings(current())).toBe("a\rb\r");
+    checkInvariants(current());
+  });
+});

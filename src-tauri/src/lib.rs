@@ -127,6 +127,18 @@ pub fn run() {
                 .item(&PredefinedMenuItem::copy(app, Some("コピー"))?)
                 .item(&PredefinedMenuItem::paste(app, Some("ペースト"))?)
                 .item(&PredefinedMenuItem::select_all(app, Some("すべてを選択"))?)
+                .separator()
+                .item(&{
+                    // 全行の改行コードを統一する(保存はしない)。フロントで setAllLineEndings を適用する
+                    let mut eol_menu = SubmenuBuilder::new(app, "改行コードを変換");
+                    for eol in dialog::LINE_ENDINGS {
+                        eol_menu = eol_menu.item(
+                            &MenuItemBuilder::with_id(format!("convert_eol:{eol}"), eol)
+                                .build(app)?,
+                        );
+                    }
+                    eol_menu.build()?
+                })
                 .build()?;
 
             let search_menu = SubmenuBuilder::new(app, "検索")

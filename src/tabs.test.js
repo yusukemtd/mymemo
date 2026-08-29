@@ -121,6 +121,18 @@ describe("tabs", () => {
     expect(docWithLineEndings(view.state)).toBe("# hi\r\nbody\n");
   });
 
+  it("convertLineEndings は改行コードが変わったときだけ非アクティブタブも未保存にする", async () => {
+    const { tabs } = await loadTabs();
+    const { docWithLineEndings } = await import("./editor.js");
+    const mixed = tabs.newTab("/tmp/mixed.txt", "a\r\nb\n");
+    const lf = tabs.newTab("/tmp/lf.txt", "a\nb\n"); // こちらがアクティブになる
+    tabs.convertLineEndings(mixed, "CRLF");
+    expect(docWithLineEndings(tabs.stateOf(mixed))).toBe("a\r\nb\r\n");
+    expect(mixed.dirty).toBe(true);
+    tabs.convertLineEndings(lf, "LF"); // 既に LF なので変化なし
+    expect(lf.dirty).toBe(false);
+  });
+
   it("markSaved は dirty を解除し、別名保存でタブ名を更新する", async () => {
     const { tabs } = await loadTabs();
     tabs.getActiveTab().dirty = true;

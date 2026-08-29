@@ -368,12 +368,23 @@ export function parseDocument(raw) {
   return { doc: Text.of(lines), eol: { set: builder.finish(), counts, fallback: "LF" } };
 }
 
-// 全行の改行コードを統一する(別名保存で選んだとき)
+// 全行の改行コードを統一する(別名保存・「編集 > 改行コードを変換」)。
+// 既にその改行コードで揃っていれば何もしない(未保存扱いにも undo 履歴にも残さない)
 export const setAllLineEndings = StateEffect.define();
-// undo/redo で削除した改行の改行コードを元に戻す({ pos, eol })
-const restoreLineEnding = StateEffect.define({
-  map: ({ pos, eol }, mapping) => ({ pos: mapping.mapPos(pos, 1), eol }),
+// undo/redo 用: 改行マーカーをまとめて元に戻す({ entries: [{ pos, eol }], fallback })。
+// fallback は null なら変更しない。同じ位置が複数あれば後のものを優先する
+const restoreLineEndings = StateEffect.define({
+  map: ({ entries, fallback }, mapping) => ({
+    entries: entries.map(({ pos, eol }) => ({ pos: mapping.mapPos(pos, 1), eol })),
+    fallback,
+  }),
 });
+
+// 既に eol だけで揃っているか(改行が 1 つもなければ fallback で判定)
+function isUniform(counts, fallback, eol) {
+  const total = EOL_KINDS.reduce((n, k) => n + counts[k], 0);
+  return counts[eol] === total && fallback === eol;
+}
 
 // { set: RangeSet<EolMarker>, counts: {LF, CRLF, CR}, fallback }
 // fallback は改行が1つもないときに使う改行コード
@@ -414,43 +425,74 @@ export const eolField = StateField.define({
     }
     for (const e of tr.effects) {
       if (e.is(setAllLineEndings)) {
+        if (isUniform(counts, fallback, e.value)) continue;
         ({ set, counts } = buildUniform(tr.state.doc, e.value));
         fallback = e.value;
         changed = true;
-      } else if (e.is(restoreLineEnding)) {
-        const { pos, eol } = e.value;
+      } else if (e.is(restoreLineEndings)) {
         const doc = tr.state.doc;
-        if (pos >= doc.length || doc.lineAt(pos).to !== pos) continue; // そこに改行がなければ無視
-        const prev = markerAt(set, pos);
-        if (prev === eol) continue;
-        if (!changed) counts = { ...counts };
-        if (prev) counts[prev]--;
-        counts[eol]++;
-        set = set.update({
-          filter: (from) => from !== pos,
-          filterFrom: pos,
-          filterTo: pos,
-          add: [eolMarkers[eol].range(pos)],
-        });
-        changed = true;
+        // 改行のある位置だけを対象にし、現在と同じ改行コードのものは除く
+        const target = new Map();
+        for (const { pos, eol } of e.value.entries) {
+          if (pos < doc.length && doc.lineAt(pos).to === pos) target.set(pos, eol);
+        }
+        for (const [pos, eol] of target) {
+          if (markerAt(set, pos) === eol) target.delete(pos);
+        }
+        if (target.size) {
+          if (!changed) counts = { ...counts };
+          const adds = [];
+          for (const [pos, eol] of target) {
+            const prev = markerAt(set, pos);
+            if (prev) counts[prev]--;
+            counts[eol]++;
+            adds.push(eolMarkers[eol].range(pos));
+          }
+          set = set.update({ filter: (from) => !target.has(from), add: adds, sort: true });
+          changed = true;
+        }
+        if (e.value.fallback != null && e.value.fallback !== fallback) {
+          fallback = e.value.fallback;
+          changed = true;
+        }
       }
     }
     return changed ? { set, counts, fallback } : value;
   },
 });
 
-// undo 用: 変更で消える改行の改行コードを記録し、取り消し時に復元する
+// undo 用: 変更で消える改行と、統一・復元で変わる改行の改行コードを記録し、取り消し時に元に戻す
 const eolHistory = invertedEffects.of((tr) => {
-  if (!tr.docChanged) return [];
-  const { set } = tr.startState.field(eolField);
-  const effects = [];
-  tr.changes.iterChanges((fromA, toA) => {
-    if (toA <= fromA) return;
-    set.between(fromA, toA, (pos, _to, m) => {
-      if (pos < toA) effects.push(restoreLineEnding.of({ pos, eol: m.eol }));
+  const { set, counts, fallback } = tr.startState.field(eolField);
+  const entries = [];
+  let restoreFallback = null;
+  if (tr.docChanged) {
+    tr.changes.iterChanges((fromA, toA) => {
+      if (toA <= fromA) return;
+      set.between(fromA, toA, (pos, _to, m) => {
+        if (pos < toA) entries.push({ pos, eol: m.eol });
+      });
     });
-  });
-  return effects;
+  }
+  for (const e of tr.effects) {
+    if (e.is(setAllLineEndings)) {
+      if (isUniform(counts, fallback, e.value)) continue; // 適用側と同じ判定で no-op
+      set.between(0, tr.startState.doc.length, (pos, _to, m) => {
+        if (m.eol !== e.value) entries.push({ pos, eol: m.eol });
+      });
+      restoreFallback = fallback;
+    } else if (e.is(restoreLineEndings) && !tr.docChanged) {
+      // 統一の undo(効果だけのトランザクション)を redo できるよう、戻す前の改行コードを記録する。
+      // 本文の変更を伴う undo では、復元される改行は redo の変更で消えるので記録しない
+      for (const { pos, eol } of e.value.entries) {
+        const prev = markerAt(set, pos);
+        if (prev && prev !== eol) entries.push({ pos, eol: prev });
+      }
+      if (e.value.fallback != null && e.value.fallback !== fallback) restoreFallback = fallback;
+    }
+  }
+  if (!entries.length && restoreFallback == null) return [];
+  return [restoreLineEndings.of({ entries, fallback: restoreFallback })];
 });
 
 // 保存用: 各行の改行コードを復元したテキスト。override を渡すと全行その改行コードにする
@@ -625,8 +667,10 @@ export function baseExtensions(onChange) {
     eolHistory,
     whitespaceCompartment.of(showWhitespace ? whitespaceExtension : []),
     EditorView.updateListener.of((u) => {
-      if (u.docChanged) onChange();
-      if (u.docChanged || u.selectionSet) {
+      // 改行コードの統一とその undo/redo は本文を変えないが、保存内容が変わるので変更扱いにする
+      const eolChanged = u.state.field(eolField) !== u.startState.field(eolField);
+      if (u.docChanged || eolChanged) onChange();
+      if (u.docChanged || u.selectionSet || eolChanged) {
         window.dispatchEvent(new CustomEvent("cursor-moved"));
       }
     }),

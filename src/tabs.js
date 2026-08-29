@@ -3,6 +3,7 @@ import {
   detectLanguage,
   languageEffect,
   setAllLineEndings,
+  eolField,
 } from "./editor.js";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -103,10 +104,17 @@ function applyEffects(tab, effects) {
   else tab.state = tab.state.update({ effects }).state;
 }
 
-// 全行の改行コードを統一する(別名保存で選んだ場合)。行末記号の表示も追従する
+// 全行の改行コードを統一する(別名保存・「編集 > 改行コードを変換」)。行末記号の表示も追従する。
+// 既に揃っていれば何も起きない
 export function convertLineEndings(tab, lineEnding) {
   if (!tabs.includes(tab)) return;
+  const before = stateOf(tab).field(eolField);
   applyEffects(tab, setAllLineEndings.of(lineEnding));
+  // アクティブタブは view の updateListener が未保存にするが、非アクティブタブでは動かないのでここで付ける
+  if (stateOf(tab).field(eolField) !== before && !tab.dirty) {
+    tab.dirty = true;
+    render();
+  }
 }
 
 // テーマ等の reconfigure を全タブに適用する。

@@ -180,6 +180,12 @@ listen("menu", async ({ payload }) => {
     applyTheme(payload.slice("theme:".length));
     return;
   }
+  if (payload.startsWith("convert_eol:")) {
+    // 全行の改行コードを統一する(保存はしない。undo で戻せる)
+    Tabs.convertLineEndings(Tabs.getActiveTab(), payload.slice("convert_eol:".length));
+    view.focus();
+    return;
+  }
   switch (payload) {
     case "new":
       Tabs.newTab();
