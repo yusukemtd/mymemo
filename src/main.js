@@ -15,6 +15,7 @@ import { initShowWhitespace, toggleShowWhitespace } from "./whitespace.js";
 import { initLineWrap, toggleLineWrap } from "./wrap.js";
 import { initFontSize, zoomIn, zoomOut, resetFontSize } from "./fontsize.js";
 import { initGrep, toggleGrep } from "./grep.js";
+import { saveSession, scheduleSaveSession, restoreSession } from "./session.js";
 import { open, confirm, message } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -27,7 +28,15 @@ initShowWhitespace(); // 同上(初期 state の空白文字表示の有無が�
 initLineWrap(); // 同上(初期 state の折り返しの有無が決まる)
 const container = document.getElementById("editor-container");
 const view = createView(container, createEditorState("", () => {}));
-Tabs.initTabs(view);
+// 起動時の無題タブはセッション復元の結果を見てから作る。最後のタブを閉じたときもセッションを保存してから終了する
+Tabs.initTabs(view, { initialTab: false, onLastTabClosed: quitApp });
+
+// --- セッション復元(前回開いていたタブと無題タブの下書き)。復元するものが無ければ無題タブを 1 つ作る ---
+const restoring = restoreSession((path, encoding) =>
+  invoke("read_file", { path, encoding })
+).then(() => {
+  if (Tabs.getTabs().length === 0) Tabs.newTab();
+});
 
 // --- ファイル操作 ---
 async function confirmDiscard(tab) {
@@ -132,6 +141,10 @@ function updateStatusBar() {
 window.addEventListener("active-tab-changed", updateStatusBar);
 window.addEventListener("cursor-moved", updateStatusBar);
 updateStatusBar();
+
+// タブ・本文・カーソルが変わったらセッションを保存する(1 秒のデバウンス。終了直前にも保存する)
+window.addEventListener("active-tab-changed", scheduleSaveSession);
+window.addEventListener("cursor-moved", scheduleSaveSession);
 
 // grep 結果からのジャンプ。ハイライト解除はジャンプ先のタブを覚えて行う
 // (タイマー発火前にタブを切り替えても、残留したり別タブに誤爆したりしないように)
@@ -239,7 +252,7 @@ listen("menu", async ({ payload }) => {
     case "quit":
       // 未保存確認を挟むため、終了メニューは PredefinedMenuItem::quit ではなく
       // カスタム ID で受けてここで処理する
-      if (await confirmQuit()) await invoke("quit_app");
+      if (await confirmQuit()) await quitApp();
       break;
   }
 });
@@ -261,10 +274,14 @@ getCurrentWebview().onDragDropEvent(async ({ payload }) => {
 // --- Finder の「このアプリケーションで開く」・ダブルクリック・Dock へのドロップで開く ---
 // Rust 側(open_files.rs)が RunEvent::Opened を "open-files" に変換して送ってくる。
 // 起動と同時に渡されたファイルはリスナー登録前に届くため Rust 側に溜まっており、
-// リスナー登録が完了してから take_pending_open_files で引き取る(順序を保証するため直列にする)
-listen("open-files", async ({ payload }) => {
-  for (const path of payload) await openFile(path);
-})
+// リスナー登録が完了してから take_pending_open_files で引き取る(順序を保証するため直列にする)。
+// セッション復元より後に開いて、復元したタブの後ろに並ぶようにする
+restoring
+  .then(() =>
+    listen("open-files", async ({ payload }) => {
+      for (const path of payload) await openFile(path);
+    })
+  )
   .then(() => invoke("take_pending_open_files"))
   .then(async (paths) => {
     for (const path of paths) await openFile(path);
@@ -291,9 +308,17 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// 終了前の未保存確認(ウィンドウを閉じる操作と Cmd+Q の両方で使う)
+// 終了(最後のタブを閉じた・確認済みの Cmd+Q)。直前にセッションを保存する
+async function quitApp() {
+  saveSession();
+  await invoke("quit_app");
+}
+
+// 終了前の未保存確認(ウィンドウを閉じる操作と Cmd+Q の両方で使う)。
+// 無題タブの下書きはセッションとして保存され次回復元されるので確認対象から外す(保存に失敗したら対象に戻す)
 async function confirmQuit() {
-  const dirtyCount = Tabs.getTabs().filter((t) => t.dirty).length;
+  const saved = saveSession();
+  const dirtyCount = Tabs.getTabs().filter((t) => t.dirty && (t.path || !saved)).length;
   if (dirtyCount === 0) return true;
   return confirm(
     `未保存のタブが ${dirtyCount} 個あります。変更を破棄して終了しますか?`,

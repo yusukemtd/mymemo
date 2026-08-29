@@ -6,6 +6,7 @@ import {
   eolField,
 } from "./editor.js";
 import { invoke } from "@tauri-apps/api/core";
+import { EditorView } from "@codemirror/view";
 
 // タブ管理: 各タブが自分の EditorState を保持し、切替時にビューへ差し替える。
 // undo 履歴も EditorState に含まれるためタブごとに維持される。
@@ -14,18 +15,21 @@ let tabs = [];
 let activeIndex = -1;
 let view = null;
 let untitledCount = 0;
+let onLastTabClosed = null; // 最後のタブを閉じたときの処理(既定はアプリ終了)
 
 const tabbarEl = document.getElementById("tabbar");
 
-export function initTabs(editorView) {
+// initialTab: 起動時に無題タブを 1 つ作る(セッション復元する場合は false にして後から作る)
+export function initTabs(editorView, { initialTab = true, onLastTabClosed: onLast = null } = {}) {
   view = editorView;
+  onLastTabClosed = onLast;
   const newBtn = document.createElement("button");
   newBtn.id = "tab-new";
   newBtn.textContent = "+";
   newBtn.title = "新規タブ (Cmd+N)";
   newBtn.addEventListener("click", () => newTab());
   tabbarEl.appendChild(newBtn);
-  newTab();
+  if (initialTab) newTab();
 }
 
 export function getActiveTab() {
@@ -42,11 +46,33 @@ export function stateOf(tab) {
 }
 
 function markDirty() {
-  const t = tabs[activeIndex];
-  if (t && !t.dirty) {
-    t.dirty = true;
+  markDirtyTab(tabs[activeIndex]);
+}
+
+// 指定タブを未保存扱いにする(セッション復元した下書きなど、編集を経ずに未保存にしたい場合)
+export function markDirtyTab(tab) {
+  if (tab && tabs.includes(tab) && !tab.dirty) {
+    tab.dirty = true;
     render();
   }
+}
+
+// 指定タブのカーソル(選択範囲)を設定する。本文の長さを超える位置は末尾に丸める
+export function setSelection(tab, { anchor, head }) {
+  if (!tabs.includes(tab)) return;
+  const len = stateOf(tab).doc.length;
+  const clamp = (n) => Math.min(Math.max(n, 0), len);
+  const selection = { anchor: clamp(anchor), head: clamp(head) };
+  if (tabs[activeIndex] === tab) view.dispatch({ selection });
+  else tab.state = tab.state.update({ selection }).state;
+}
+
+// アクティブタブのカーソル位置が見えるようスクロールする(setState 直後は先頭表示になるため)
+export function revealCursor() {
+  if (activeIndex < 0) return;
+  view.dispatch({
+    effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "center" }),
+  });
 }
 
 // content は改行コード混在可の生テキスト(改行コードは state 側で行ごとに保持される)
@@ -157,7 +183,8 @@ export async function closeTab(index, onConfirmClose, quitIfLast = true) {
   if (tabs.length === 0) {
     activeIndex = -1;
     if (quitIfLast) {
-      await invoke("quit_app");
+      if (onLastTabClosed) await onLastTabClosed();
+      else await invoke("quit_app");
       return;
     }
     newTab();

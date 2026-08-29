@@ -138,7 +138,7 @@ CP932 / EUC-JP / UTF-16 の判定と書き込みは `cargo test`(`src-tauri/src/
 - **grep ジャンプ行のクラスは `.cm-grep-jump`** で 1.5 秒後に消える。`waitfor .cm-grep-jump 2000` で拾える。
 - **native.mjs の `--type` は IME を通る**: 入力ソースが日本語のままだと `native hello` が「ナチヴェへっぉ」+ 変換候補になる(スクリーンショットで確認)。文字列の検証は driver.mjs で行い、native は起動確認と見た目だけに使う。
 - **native.mjs はウィンドウ出現までの間 System Events が `-1728` を返す**(`process "mymemo" を取り出すことはできません`)。0.5 秒間隔で最大 30 秒再試行する。
-- driver.mjs は `localStorage` が空の新規プロファイルで始まるので、テーマは常に `dark`・空白文字表示は ON から始まる。
+- driver.mjs は `localStorage` が空の新規プロファイルで始まるので、テーマは常に `dark`・空白文字表示は ON・セッション復元なし(無題タブ 1 つ)から始まる。セッション復元は `eval localStorage.setItem("mymemo.session", ...)` → `eval location.reload()` → `wait 2000` で確認できる(モックはページ再読み込みでも再注入される)。
 - driver.mjs はポート 1420 が既に応答していればそれを再利用する(`npm run dev` を別で動かしていても可)。`native.mjs` 実行中は 1420 が使われているので driver.mjs と同時に走らせない。
 - Bash から driver.mjs を heredoc で呼ぶスクリプトをさらに heredoc で書くとき、外側の終端に `EOF` を使うと driver 用の `EOF` 行で切れる(この文書を書くときに踏んだ)。外側は別の終端語にする。zsh は `noclobber` で `>` の上書きを拒むので `>|`。
 
