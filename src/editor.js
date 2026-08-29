@@ -47,6 +47,7 @@ import {
   foldKeymap,
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { markdownKeymap } from "@codemirror/lang-markdown";
 import { getDefaultIndent } from "./indent.js";
 import { countMatches, describeMatches, replaceInSelection } from "./searchtools.js";
@@ -769,6 +770,17 @@ export function setFoldGutter(show) {
   return () => foldGutterCompartment.reconfigure(show ? foldGutterExtension : []);
 }
 
+// --- 括弧・引用符の自動補完(編集 > 括弧・引用符を自動で閉じる。既定は OFF) ---
+// ( [ { ' " を入力すると対応する閉じ記号を入れ、閉じ記号の入力・Backspace は対で扱う
+const closeBracketsCompartment = new Compartment();
+let autoCloseBrackets = false;
+const closeBracketsExtension = [closeBrackets(), keymap.of(closeBracketsKeymap)];
+
+export function setCloseBrackets(on) {
+  autoCloseBrackets = on;
+  return () => closeBracketsCompartment.reconfigure(on ? closeBracketsExtension : []);
+}
+
 // --- 行の折り返し(表示 > 行を折り返す) ---
 const wrapCompartment = new Compartment();
 let lineWrap = false;
@@ -800,6 +812,7 @@ export function baseExtensions(onChange, indent = getDefaultIndent()) {
     highlightSelectionMatches(),
     search({ top: true, createPanel: createSearchPanel }),
     indentCompartment.of(indentExtension(indent)),
+    closeBracketsCompartment.of(autoCloseBrackets ? closeBracketsExtension : []), // Backspace を既定より優先させるため keymap より前
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap,

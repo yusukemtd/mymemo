@@ -229,6 +229,18 @@ pub fn run() {
                 )
                 .build()?;
 
+            // ON/OFF 設定の項目。checked は既定値で、起動直後にフロントエンドの set_toggle で保存値に同期される
+            let mut toggles = HashMap::new();
+            let mut toggle_item = |id: &str, label: &str, default: bool| {
+                let item = CheckMenuItemBuilder::with_id(id, label)
+                    .checked(default)
+                    .build(app)?;
+                toggles.insert(id.to_string(), item.clone());
+                tauri::Result::Ok(item)
+            };
+            let close_brackets_item =
+                toggle_item("toggle_close_brackets", "括弧・引用符を自動で閉じる", false)?;
+
             // 既定はタブ幅 4・ハードタブ。アクティブタブに合わせてフロントエンドの set_indent で同期される
             let mut size_items = Vec::new();
             let mut indent_sub = SubmenuBuilder::new(app, "インデント");
@@ -279,6 +291,7 @@ pub fn run() {
                     enc_menu.build()?
                 })
                 .item(&indent_menu)
+                .item(&close_brackets_item)
                 .separator()
                 .item(&{
                     // 行単位の変換。フロントの transform.js が選択範囲(無ければ全文)に適用する
@@ -333,15 +346,6 @@ pub fn run() {
             for item in &theme_items {
                 theme_sub = theme_sub.item(item);
             }
-            // ON/OFF 設定の項目。checked は既定値で、起動直後にフロントエンドの set_toggle で保存値に同期される
-            let mut toggles = HashMap::new();
-            let mut toggle_item = |id: &str, label: &str, default: bool| {
-                let item = CheckMenuItemBuilder::with_id(id, label)
-                    .checked(default)
-                    .build(app)?;
-                toggles.insert(id.to_string(), item.clone());
-                tauri::Result::Ok(item)
-            };
             let whitespace_item = toggle_item("toggle_whitespace", "空白文字・改行を表示", true)?;
             let wrap_item = toggle_item("toggle_wrap", "行を折り返す", false)?;
             let fold_gutter_item = toggle_item("toggle_fold_gutter", "折りたたみガターを表示", true)?;
