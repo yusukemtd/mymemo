@@ -14,6 +14,13 @@ import { initTheme, applyTheme } from "./theme.js";
 import { initShowWhitespace, toggleShowWhitespace } from "./whitespace.js";
 import { initLineWrap, toggleLineWrap } from "./wrap.js";
 import { initFontSize, zoomIn, zoomOut, resetFontSize } from "./fontsize.js";
+import {
+  initIndent,
+  setDefaultIndent,
+  normalizeIndent,
+  describeIndent,
+  syncIndentMenu,
+} from "./indent.js";
 import { initGrep, toggleGrep } from "./grep.js";
 import { saveSession, scheduleSaveSession, restoreSession } from "./session.js";
 import { checkExternalChanges, needsOverwriteConfirm, reloadTab } from "./external.js";
@@ -34,6 +41,7 @@ import { listen } from "@tauri-apps/api/event";
 initTheme(); // エディタ生成前に呼ぶ(初期 state のテーマ極性が決まる)
 initShowWhitespace(); // 同上(初期 state の空白文字表示の有無が決まる)
 initLineWrap(); // 同上(初期 state の折り返しの有無が決まる)
+initIndent(); // 同上(判定できないファイルのインデント既定値が決まる)
 const container = document.getElementById("editor-container");
 const view = createView(container, createEditorState("", () => {}));
 // 起動時の無題タブはセッション復元の結果を見てから作る。最後のタブを閉じたときもセッションを保存してから終了する
@@ -183,6 +191,7 @@ async function saveFile(as = false) {
 // --- ステータスバー ---
 const statusPos = document.getElementById("status-pos");
 const statusCount = document.getElementById("status-count");
+const statusIndent = document.getElementById("status-indent");
 const statusEnc = document.getElementById("status-encoding");
 const statusEol = document.getElementById("status-eol");
 
@@ -194,6 +203,17 @@ function updateStatusBar() {
   const line = view.state.doc.lineAt(head);
   statusPos.textContent = `${line.number} 行, ${head - line.from + 1} 列`;
   statusCount.textContent = describeCharCount(view.state);
+  statusIndent.textContent = tab ? describeIndent(tab.indent) : "";
+  if (tab) syncIndentMenu(tab.indent);
+}
+
+// 「編集 > インデント」: アクティブタブの設定を変え、判定できないファイル用の既定値としても覚える
+function changeIndent(patch) {
+  const tab = Tabs.getActiveTab();
+  if (!tab) return;
+  const settings = normalizeIndent({ ...tab.indent, ...patch });
+  Tabs.setIndent(tab, settings);
+  setDefaultIndent(settings);
 }
 
 window.addEventListener("active-tab-changed", updateStatusBar);
@@ -256,6 +276,11 @@ listen("menu", async ({ payload }) => {
     await openFile(null, payload.slice("open_enc:".length));
     return;
   }
+  if (payload.startsWith("tabsize:")) {
+    changeIndent({ tabSize: Number(payload.slice("tabsize:".length)) });
+    view.focus();
+    return;
+  }
   if (payload.startsWith("recent:")) {
     const path = getRecentFiles()[Number(payload.slice("recent:".length))];
     if (path) await openFile(path);
@@ -290,6 +315,10 @@ listen("menu", async ({ payload }) => {
       break;
     case "recent_clear":
       clearRecentFiles();
+      break;
+    case "soft_tabs":
+      changeIndent({ softTabs: !Tabs.getActiveTab()?.indent.softTabs });
+      view.focus();
       break;
     case "close_tab":
       await Tabs.closeTab(

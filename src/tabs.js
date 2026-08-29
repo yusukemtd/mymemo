@@ -2,11 +2,13 @@ import {
   createEditorState,
   detectLanguage,
   languageEffect,
+  indentEffect,
   setAllLineEndings,
   eolField,
 } from "./editor.js";
 import { invoke } from "@tauri-apps/api/core";
 import { EditorView } from "@codemirror/view";
+import { detectIndent, getDefaultIndent, normalizeIndent } from "./indent.js";
 
 // タブ管理: 各タブが自分の EditorState を保持し、切替時にビューへ差し替える。
 // undo 履歴も EditorState に含まれるためタブごとに維持される。
@@ -79,13 +81,15 @@ export function revealCursor() {
 // mtime は読んだ時点のファイル更新時刻(UNIX ミリ秒。ディスク上の変更検知に使う。不明なら null)
 export function newTab(path = null, content = "", encoding = "UTF-8", mtime = null) {
   untitledCount += path ? 0 : 1;
+  const indent = detectIndent(content) ?? getDefaultIndent();
   const tab = {
     path,
     name: path ? path.split("/").pop() : `無題-${untitledCount}`,
-    state: createEditorState(content, markDirty),
+    state: createEditorState(content, markDirty, indent),
     dirty: false,
     encoding,
     mtime,
+    indent, // { tabSize, softTabs }。開いたときに字下げから判定し、メニューで変えられる
   };
   saveCurrentState();
   tabs.push(tab);
@@ -143,6 +147,14 @@ export function convertLineEndings(tab, lineEnding) {
     tab.dirty = true;
     render();
   }
+}
+
+// アクティブでないタブも含め、指定タブのインデント設定を変える(ステータスバー・メニューは render で追従)
+export function setIndent(tab, settings) {
+  if (!tabs.includes(tab)) return;
+  tab.indent = normalizeIndent(settings);
+  applyEffects(tab, indentEffect(tab.indent));
+  render();
 }
 
 // テーマ等の reconfigure を全タブに適用する。
@@ -207,7 +219,8 @@ export function replaceActiveTab(path, content, encoding = "UTF-8", mtime = null
   t.dirty = false;
   t.encoding = encoding;
   t.mtime = mtime;
-  t.state = createEditorState(content, markDirty);
+  t.indent = detectIndent(content) ?? getDefaultIndent();
+  t.state = createEditorState(content, markDirty, t.indent);
   view.setState(t.state);
   applyLanguage(t);
   render();
@@ -219,7 +232,7 @@ export function replaceActiveTab(path, content, encoding = "UTF-8", mtime = null
 export function replaceContent(tab, content, encoding, mtime = null) {
   if (!tabs.includes(tab)) return;
   const { anchor, head } = stateOf(tab).selection.main;
-  tab.state = createEditorState(content, markDirty);
+  tab.state = createEditorState(content, markDirty, tab.indent); // インデント設定は読み直しても保つ
   tab.encoding = encoding;
   tab.mtime = mtime;
   tab.dirty = false;

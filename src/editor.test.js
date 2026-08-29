@@ -57,15 +57,37 @@ describe("Tab キー", () => {
     view.destroy();
   });
 
-  it("選択範囲があれば Tab で行がインデントされ、Shift+Tab で戻る", async () => {
+  it("選択範囲があれば Tab で行がインデントされ(既定はタブ文字)、Shift+Tab で戻る", async () => {
     const { EditorView } = await import("@codemirror/view");
     const { createEditorState } = await import("./editor.js");
     const view = new EditorView({ state: createEditorState("a\nb", () => {}), parent: document.body });
     view.dispatch({ selection: { anchor: 0, head: 3 } });
     press(view, {});
-    expect(view.state.doc.toString()).toBe("    a\n    b");
+    expect(view.state.doc.toString()).toBe("\ta\n\tb");
     press(view, { shiftKey: true });
     expect(view.state.doc.toString()).toBe("a\nb");
+    view.destroy();
+  });
+
+  it("ソフトタブなら Tab で次のタブ位置までスペースが入り、選択範囲のインデントもスペースになる", async () => {
+    const { EditorView } = await import("@codemirror/view");
+    const { createEditorState, indentOf, indentEffect } = await import("./editor.js");
+    const soft = { tabSize: 4, softTabs: true };
+    const view = new EditorView({ state: createEditorState("ab\nc", () => {}, soft), parent: document.body });
+    expect(indentOf(view.state)).toEqual(soft);
+    view.dispatch({ selection: { anchor: 1 } });
+    press(view, {});
+    expect(view.state.doc.toString()).toBe("a   b\nc"); // 1 桁目から次のタブ位置(4)まで 3 つ
+    view.dispatch({ selection: { anchor: 6, head: 7 } });
+    press(view, {});
+    expect(view.state.doc.toString()).toBe("a   b\n    c");
+
+    // 設定を切り替えるとタブ文字に戻る
+    view.dispatch({ effects: indentEffect({ tabSize: 2, softTabs: false }) });
+    expect(indentOf(view.state)).toEqual({ tabSize: 2, softTabs: false });
+    view.dispatch({ selection: { anchor: 0 } });
+    press(view, {});
+    expect(view.state.doc.toString()).toBe("\ta   b\n    c");
     view.destroy();
   });
 });

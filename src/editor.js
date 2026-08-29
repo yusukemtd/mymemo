@@ -8,6 +8,8 @@ import {
   RangeSet,
   RangeSetBuilder,
   MapMode,
+  EditorSelection,
+  countColumn,
 } from "@codemirror/state";
 import {
   EditorView,
@@ -30,6 +32,7 @@ import {
   historyKeymap,
   invertedEffects,
   insertTab,
+  indentMore,
   indentLess,
 } from "@codemirror/commands";
 import {
@@ -41,6 +44,7 @@ import {
   LanguageDescription,
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
+import { getDefaultIndent } from "./indent.js";
 import { tags as t } from "@lezer/highlight";
 import {
   search,
@@ -676,6 +680,45 @@ export function describeCharCount(state) {
   return sel > 0 ? `選択 ${sel.toLocaleString("ja-JP")} / ${total} 文字` : `${total} 文字`;
 }
 
+// --- インデント(タブ幅・ソフトタブ)。タブごとに違うので state ごとに Compartment で持つ ---
+const indentCompartment = new Compartment();
+
+// tabSize はタブ文字の表示幅。indentUnit はインデント操作(選択範囲の Tab / 自動インデント)の単位で、
+// ソフトタブならタブ幅ぶんのスペース、そうでなければタブ文字
+function indentExtension({ tabSize, softTabs }) {
+  return [EditorState.tabSize.of(tabSize), indentUnit.of(softTabs ? " ".repeat(tabSize) : "\t")];
+}
+
+export function indentEffect(settings) {
+  return indentCompartment.reconfigure(indentExtension(settings));
+}
+
+// state に設定されているインデント設定
+export function indentOf(state) {
+  return { tabSize: state.tabSize, softTabs: state.facet(indentUnit) !== "\t" };
+}
+
+// Tab キー: 選択範囲があればインデント、ソフトタブなら次のタブ位置までスペース、それ以外はタブ文字
+export const insertTabKey = (view) => {
+  const { state } = view;
+  if (state.selection.ranges.some((r) => !r.empty)) return indentMore(view);
+  if (state.facet(indentUnit) === "\t") return insertTab(view);
+  const size = state.tabSize;
+  view.dispatch(
+    state.changeByRange((range) => {
+      const line = state.doc.lineAt(range.head);
+      const col = countColumn(line.text.slice(0, range.head - line.from), size);
+      const spaces = " ".repeat(size - (col % size));
+      return {
+        changes: { from: range.head, insert: spaces },
+        range: EditorSelection.cursor(range.head + spaces.length),
+      };
+    }),
+    { scrollIntoView: true, userEvent: "input" }
+  );
+  return true;
+};
+
 // --- 行の折り返し(表示 > 行を折り返す) ---
 const wrapCompartment = new Compartment();
 let lineWrap = false;
@@ -686,8 +729,8 @@ export function setLineWrap(wrap) {
   return () => wrapCompartment.reconfigure(wrap ? EditorView.lineWrapping : []);
 }
 
-// エディタ拡張一式。dirty 通知用の onChange を受け取る
-export function baseExtensions(onChange) {
+// エディタ拡張一式。dirty 通知用の onChange と、このタブのインデント設定を受け取る
+export function baseExtensions(onChange, indent = getDefaultIndent()) {
   return [
     lineNumbers(),
     highlightActiveLine(),
@@ -704,14 +747,14 @@ export function baseExtensions(onChange) {
     indentOnInput(), // 言語なしでは no-op。indentUnit の4スペースを尊重
     highlightSelectionMatches(),
     search({ top: true, createPanel: createSearchPanel }),
-    indentUnit.of("    "),
+    indentCompartment.of(indentExtension(indent)),
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap,
       ...searchKeymap,
-      // 既定では Tab はフォーカス移動。タブ文字を入力できるようにする
+      // 既定では Tab はフォーカス移動。タブ文字(ソフトタブならスペース)を入力できるようにする
       // (選択範囲があればインデント、Shift+Tab でインデント解除)
-      { key: "Tab", run: insertTab, shift: indentLess },
+      { key: "Tab", run: insertTabKey, shift: indentLess },
     ]),
     themeCompartment.of(cmThemes[editorDark ? "dark" : "light"]),
     japanesePhrases,
@@ -733,11 +776,11 @@ export function baseExtensions(onChange) {
 }
 
 // raw は改行コード混在可の生テキスト。改行はマーカーに分離して eolField の初期値にする
-export function createEditorState(raw, onChange) {
+export function createEditorState(raw, onChange, indent = getDefaultIndent()) {
   const { doc, eol } = parseDocument(raw);
   return EditorState.create({
     doc,
-    extensions: [baseExtensions(onChange), eolField.init(() => eol)],
+    extensions: [baseExtensions(onChange, indent), eolField.init(() => eol)],
   });
 }
 

@@ -31,6 +31,22 @@ describe("tabs", () => {
     invoke.mockClear();
   });
 
+  it("開いた内容の字下げからインデント設定を判定し、setIndent で変えられる", async () => {
+    const { tabs, view } = await loadTabs();
+    const { indentOf } = await import("./editor.js");
+    const soft = tabs.newTab("/soft.py", "def f():\n  return 1\n");
+    expect(soft.indent).toEqual({ tabSize: 2, softTabs: true });
+    expect(indentOf(view.state)).toEqual({ tabSize: 2, softTabs: true });
+    const hard = tabs.newTab("/hard.go", "func f() {\n\treturn\n}\n");
+    expect(hard.indent).toEqual({ tabSize: 4, softTabs: false });
+    expect(tabs.newTab().indent).toEqual({ tabSize: 4, softTabs: false }); // 判定できなければ既定値
+
+    tabs.setIndent(soft, { tabSize: 8, softTabs: true }); // 非アクティブタブにも効く
+    expect(indentOf(tabs.stateOf(soft))).toEqual({ tabSize: 8, softTabs: true });
+    tabs.activate(1);
+    expect(indentOf(view.state)).toEqual({ tabSize: 8, softTabs: true });
+  });
+
   it("初期化で無題タブが1つ作られる", async () => {
     const { tabs } = await loadTabs();
     expect(tabs.getTabs()).toHaveLength(1);

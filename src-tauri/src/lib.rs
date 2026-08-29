@@ -51,6 +51,25 @@ fn set_show_whitespace(
     item.0.set_checked(show).map_err(|e| e.to_string())
 }
 
+// 「編集 > インデント」の CheckMenuItem ハンドル(タブ幅 2 / 4 / 8 とソフトタブ。チェック状態の同期用)
+struct IndentMenuItems {
+    sizes: Vec<(u32, CheckMenuItem<tauri::Wry>)>,
+    soft: CheckMenuItem<tauri::Wry>,
+}
+
+// アクティブタブが変わったとき・設定を変えたときにフロントエンドから呼ばれる
+#[tauri::command]
+fn set_indent(
+    items: tauri::State<IndentMenuItems>,
+    tab_size: u32,
+    soft_tabs: bool,
+) -> Result<(), String> {
+    for (size, item) in &items.sizes {
+        item.set_checked(*size == tab_size).map_err(|e| e.to_string())?;
+    }
+    items.soft.set_checked(soft_tabs).map_err(|e| e.to_string())
+}
+
 // 「表示 > 行を折り返す」の CheckMenuItem ハンドル(チェック状態の同期用)
 struct WrapMenuItem(CheckMenuItem<tauri::Wry>);
 
@@ -188,6 +207,25 @@ pub fn run() {
                 )
                 .build()?;
 
+            // 既定はタブ幅 4・ハードタブ。アクティブタブに合わせてフロントエンドの set_indent で同期される
+            let mut size_items = Vec::new();
+            let mut indent_sub = SubmenuBuilder::new(app, "インデント");
+            for size in [2u32, 4, 8] {
+                let item = CheckMenuItemBuilder::with_id(format!("tabsize:{size}"), format!("タブ幅 {size}"))
+                    .checked(size == 4)
+                    .build(app)?;
+                indent_sub = indent_sub.item(&item);
+                size_items.push((size, item));
+            }
+            let soft_item = CheckMenuItemBuilder::with_id("soft_tabs", "スペースでインデント(ソフトタブ)")
+                .checked(false)
+                .build(app)?;
+            let indent_menu = indent_sub.separator().item(&soft_item).build()?;
+            app.manage(IndentMenuItems {
+                sizes: size_items,
+                soft: soft_item,
+            });
+
             let edit_menu = SubmenuBuilder::new(app, "編集")
                 .item(&PredefinedMenuItem::undo(app, Some("取り消す"))?)
                 .item(&PredefinedMenuItem::redo(app, Some("やり直す"))?)
@@ -208,6 +246,7 @@ pub fn run() {
                     }
                     eol_menu.build()?
                 })
+                .item(&indent_menu)
                 .build()?;
 
             let search_menu = SubmenuBuilder::new(app, "検索")
@@ -313,6 +352,7 @@ pub fn run() {
             set_show_whitespace,
             set_line_wrap,
             set_recent_files,
+            set_indent,
             open_files::take_pending_open_files,
             grep::grep_search,
             file_io::read_file,
