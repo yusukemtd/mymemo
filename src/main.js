@@ -315,8 +315,9 @@ listen("menu", async ({ payload }) => {
     return;
   }
   if (payload.startsWith("md:")) {
-    // Markdown の書式(太字・斜体・取り消し線・インラインコード・リンク)
-    MARKDOWN_COMMANDS[payload.slice("md:".length)]?.(view);
+    // Markdown の書式・行操作(md:<kind> または md:<kind>:<引数>)
+    const [kind, arg] = payload.slice("md:".length).split(":");
+    MARKDOWN_COMMANDS[kind]?.(view, arg);
     view.focus();
     return;
   }

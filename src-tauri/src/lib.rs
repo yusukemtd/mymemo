@@ -347,6 +347,22 @@ pub fn run() {
                                 .build(app)?,
                         );
                     }
+                    sub = sub.separator();
+                    for level in 1..=6u8 {
+                        sub = sub.item(
+                            &MenuItemBuilder::with_id(
+                                format!("md:heading:{level}"),
+                                format!("見出し {level}"),
+                            )
+                            .accelerator(format!("CmdOrCtrl+Alt+{level}"))
+                            .build(app)?,
+                        );
+                    }
+                    sub = sub.item(
+                        &MenuItemBuilder::with_id("md:heading:0", "見出しを解除")
+                            .accelerator("CmdOrCtrl+Alt+0")
+                            .build(app)?,
+                    );
                     sub.build()?
                 })
                 .build()?;

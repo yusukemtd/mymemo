@@ -81,11 +81,69 @@ export function insertLink(view) {
   return true;
 }
 
-// メニュー項目 ID(md:<kind>)→ コマンド
+// --- 行単位の操作(見出しなど)。対象は選択範囲(複数可)にかかる行 ---
+
+// 対象行を行番号順に返す(複数選択は合算、重複なし)
+function selectedLines(state) {
+  const seen = new Set();
+  const lines = [];
+  for (const r of state.selection.ranges) {
+    const from = state.doc.lineAt(r.from).number;
+    const to = state.doc.lineAt(r.to).number;
+    for (let n = from; n <= to; n++) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      lines.push(state.doc.line(n));
+    }
+  }
+  return lines.sort((a, b) => a.number - b.number);
+}
+
+// 複数行を対象にするときは空行を飛ばす(1 行だけなら空行でもマークを付けて書き始められるようにする)
+function targetLines(state) {
+  const lines = selectedLines(state);
+  return lines.length > 1 ? lines.filter((l) => l.text.trim() !== "") : lines;
+}
+
+const HEADING_RE = /^(\s{0,3})(#{1,6})(?:\s+|$)/;
+
+// 見出しレベルを level(1〜6)にする。0 で見出しを解除。既にそのレベルの行は変えない
+export function setHeading(view, level) {
+  const { state } = view;
+  const prefix = level ? "#".repeat(level) + " " : "";
+  const changes = [];
+  for (const line of targetLines(state)) {
+    const m = HEADING_RE.exec(line.text);
+    if (m) {
+      if (m[2].length === level) continue;
+      changes.push({ from: line.from + m[1].length, to: line.from + m[0].length, insert: prefix });
+    } else if (level) {
+      const indent = /^\s*/.exec(line.text)[0].length;
+      changes.push({ from: line.from + indent, insert: prefix });
+    }
+  }
+  if (!changes.length) return false;
+  dispatchLineChanges(view, changes);
+  return true;
+}
+
+// 行頭への挿入でカーソルがマークの前に取り残されないよう、選択は挿入の後ろ側へ写像する
+function dispatchLineChanges(view, changes) {
+  const set = view.state.changes(changes);
+  view.dispatch({
+    changes: set,
+    selection: view.state.selection.map(set, 1),
+    scrollIntoView: true,
+    userEvent: "input",
+  });
+}
+
+// メニュー項目 ID(md:<kind>[:<arg>])→ コマンド
 export const MARKDOWN_COMMANDS = {
   bold: (view) => toggleInline(view, "**"),
   italic: (view) => toggleInline(view, "*"),
   strike: (view) => toggleInline(view, "~~"),
   code: (view) => toggleInline(view, "`"),
   link: insertLink,
+  heading: (view, level) => setHeading(view, Number(level)),
 };

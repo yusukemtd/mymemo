@@ -145,3 +145,56 @@ describe("書式ショートカット(toggleInline / insertLink)", () => {
     c.view.destroy();
   });
 });
+
+describe("見出しレベル(setHeading)", () => {
+  const mk = async (doc, sel) => {
+    const { setHeading } = await import("./markdown.js");
+    const { EditorSelection } = await import("@codemirror/state");
+    const view = new EditorView({ state: createEditorState(doc, () => {}), parent: document.body });
+    if (sel) view.dispatch({ selection: sel });
+    return { view, setHeading, EditorSelection };
+  };
+
+  it("行頭に # を付け、レベルを変え、0 で外す。同じレベルなら何もしない", async () => {
+    const { view, setHeading } = await mk("title\nbody", { anchor: 2 });
+    expect(setHeading(view, 2)).toBe(true);
+    expect(view.state.doc.toString()).toBe("## title\nbody");
+    expect(view.state.selection.main.head).toBe(5); // カーソルは同じ文字の上
+    expect(setHeading(view, 2)).toBe(false);
+    setHeading(view, 4);
+    expect(view.state.doc.toString()).toBe("#### title\nbody");
+    setHeading(view, 0);
+    expect(view.state.doc.toString()).toBe("title\nbody");
+    expect(setHeading(view, 0)).toBe(false);
+    view.destroy();
+  });
+
+  it("# だけの行や先頭の空白(3 つまで)も見出しとして扱う", async () => {
+    const { view, setHeading } = await mk("  ##\nx", { anchor: 0 });
+    setHeading(view, 1);
+    expect(view.state.doc.toString()).toBe("  # \nx");
+    view.destroy();
+  });
+
+  it("複数行選択では各行に付け、空行は飛ばす。1 行だけなら空行にも付ける", async () => {
+    const { view, setHeading } = await mk("a\n\n# b\nc", { anchor: 0, head: 7 });
+    setHeading(view, 3);
+    expect(view.state.doc.toString()).toBe("### a\n\n### b\n### c");
+    view.destroy();
+    const single = await mk("", { anchor: 0 });
+    single.setHeading(single.view, 1);
+    expect(single.view.state.doc.toString()).toBe("# ");
+    expect(single.view.state.selection.main.head).toBe(2);
+    single.view.destroy();
+  });
+
+  it("複数選択は合算して重複なく処理する", async () => {
+    const { view, setHeading, EditorSelection } = await mk("a\nb\nc");
+    view.dispatch({
+      selection: EditorSelection.create([EditorSelection.range(0, 3), EditorSelection.range(2, 5)]),
+    });
+    setHeading(view, 1);
+    expect(view.state.doc.toString()).toBe("# a\n# b\n# c");
+    view.destroy();
+  });
+});
