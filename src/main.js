@@ -32,6 +32,7 @@ import { initGrep, toggleGrep } from "./grep.js";
 import { saveSession, scheduleSaveSession, restoreSession } from "./session.js";
 import { checkExternalChanges, needsOverwriteConfirm, reloadTab } from "./external.js";
 import { applyLineTransform } from "./transform.js";
+import { MARKDOWN_COMMANDS } from "./markdown.js";
 import {
   initRecentFiles,
   addRecentFile,
@@ -303,6 +304,12 @@ listen("menu", async ({ payload }) => {
   if (payload in TOGGLES) {
     // 表示・編集の ON/OFF 設定(空白文字表示・折り返しなど)
     TOGGLES[payload].toggle();
+    return;
+  }
+  if (payload.startsWith("md:")) {
+    // Markdown の書式(太字・斜体・取り消し線・インラインコード・リンク)
+    MARKDOWN_COMMANDS[payload.slice("md:".length)]?.(view);
+    view.focus();
     return;
   }
   if (payload.startsWith("transform:")) {

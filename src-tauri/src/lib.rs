@@ -314,6 +314,24 @@ pub fn run() {
                     }
                     sub.build()?
                 })
+                .item(&{
+                    // Markdown の書式。選択範囲をマーカーで囲む / 外す(フロントの markdown.js)
+                    let mut sub = SubmenuBuilder::new(app, "Markdown");
+                    for (id, label, key) in [
+                        ("md:bold", "太字", "CmdOrCtrl+B"),
+                        ("md:italic", "斜体", "CmdOrCtrl+I"),
+                        ("md:strike", "取り消し線", "CmdOrCtrl+Shift+X"),
+                        ("md:code", "インラインコード", "CmdOrCtrl+E"),
+                        ("md:link", "リンク", "CmdOrCtrl+K"),
+                    ] {
+                        sub = sub.item(
+                            &MenuItemBuilder::with_id(id, label)
+                                .accelerator(key)
+                                .build(app)?,
+                        );
+                    }
+                    sub.build()?
+                })
                 .build()?;
 
             let search_menu = SubmenuBuilder::new(app, "検索")
