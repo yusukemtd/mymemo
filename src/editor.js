@@ -44,6 +44,7 @@ import {
   LanguageDescription,
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
+import { markdownKeymap } from "@codemirror/lang-markdown";
 import { getDefaultIndent } from "./indent.js";
 import { countMatches, describeMatches, replaceInSelection } from "./searchtools.js";
 import { tags as t } from "@lezer/highlight";
@@ -116,10 +117,15 @@ export function detectLanguage(path, firstLine = "") {
   return desc;
 }
 
-// ロード済み LanguageSupport(null でプレーンテキスト)を適用する reconfigure エフェクト
-export function languageEffect(support) {
-  return languageCompartment.reconfigure(support ?? []);
+// ロード済み LanguageSupport(null でプレーンテキスト)と言語固有の拡張を適用する reconfigure エフェクト。
+// 言語 Compartment は既定のキーマップより前にあるので、ここに入れたキーマップが優先される
+export function languageEffect(support, extras = []) {
+  return languageCompartment.reconfigure(support ? [support, extras] : []);
 }
+
+// Markdown の入力支援: Enter でリスト・引用・チェックボックスを次の行に継続(空の項目で Enter すると終える)、
+// Backspace で行頭のマークアップを消す。Markdown と判定されたタブにだけ入れる
+export const markdownExtras = [keymap.of(markdownKeymap)];
 
 // 色は themes.css の --syn-* トークンを参照するため、単一定義で全テーマに追従する
 const highlightStyle = HighlightStyle.define([

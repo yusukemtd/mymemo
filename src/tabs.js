@@ -2,6 +2,7 @@ import {
   createEditorState,
   detectLanguage,
   languageEffect,
+  markdownExtras,
   indentEffect,
   setAllLineEndings,
   eolField,
@@ -127,7 +128,7 @@ async function applyLanguage(tab) {
   }
   if (tab.langToken !== token) return;
   if (!tabs.includes(tab)) return;
-  applyEffects(tab, languageEffect(support));
+  applyEffects(tab, languageEffect(support, desc?.name === "Markdown" ? markdownExtras : []));
 }
 
 // 指定タブの state にエフェクトを適用する(アクティブなら view 経由、それ以外は保持中の state を差し替え)
