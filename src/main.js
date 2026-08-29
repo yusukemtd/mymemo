@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import { openSearchPanel } from "@codemirror/search";
+import { openSearchPanel, gotoLine } from "@codemirror/search";
 import {
   createEditorState,
   createView,
@@ -217,6 +217,9 @@ listen("menu", async ({ payload }) => {
       break;
     case "grep":
       toggleGrep();
+      break;
+    case "goto_line":
+      gotoLine(view); // CodeMirror 標準の行番号入力パネル(文言は japanesePhrases で日本語化済み)
       break;
     case "toggle_whitespace":
       toggleShowWhitespace();

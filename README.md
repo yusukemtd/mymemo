@@ -36,12 +36,12 @@ Mac 向けの軽量テキストエディタ(Tauri 2 + CodeMirror 6)。
 | Ctrl+Tab / Ctrl+Shift+Tab | タブ巡回 |
 | Cmd+F | 検索・置換パネル |
 | Cmd+Shift+F | 複数ファイル grep |
+| Cmd+L | 行へ移動(`Cmd+Option+G` でも可) |
 | Cmd+= / Cmd+- / Cmd+0 | フォントを拡大 / 縮小 / 標準サイズ(13px)に戻す |
 | Tab / Shift+Tab | タブ文字を入力(選択範囲があればインデント)/ インデント解除 |
 | Cmd+[ / Cmd+] | インデント解除 / インデント |
 | Cmd+Z / Cmd+Shift+Z | 取り消す / やり直す |
 | Cmd+G / Cmd+Shift+G | 次 / 前の一致へ(検索パネルを閉じていても使える) |
-| Cmd+Option+G | 行へ移動 |
 | Option+↑ / ↓ | 行を上 / 下へ移動 |
 | Shift+Option+↑ / ↓ | 行を上 / 下に複製 |
 | Cmd+Shift+K | 行を削除 |

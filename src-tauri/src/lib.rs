@@ -165,6 +165,12 @@ pub fn run() {
                         .accelerator("CmdOrCtrl+Shift+F")
                         .build(app)?,
                 )
+                .separator()
+                .item(
+                    &MenuItemBuilder::with_id("goto_line", "行へ移動…")
+                        .accelerator("CmdOrCtrl+L")
+                        .build(app)?,
+                )
                 .build()?;
 
             let theme_defs = [
