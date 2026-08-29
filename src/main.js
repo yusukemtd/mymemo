@@ -11,6 +11,7 @@ import {
 import * as Tabs from "./tabs.js";
 import { initTheme, applyTheme } from "./theme.js";
 import { initShowWhitespace, toggleShowWhitespace } from "./whitespace.js";
+import { initLineWrap, toggleLineWrap } from "./wrap.js";
 import { initGrep, toggleGrep } from "./grep.js";
 import { open, confirm, message } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
@@ -21,6 +22,7 @@ import { listen } from "@tauri-apps/api/event";
 // --- 起動 ---
 initTheme(); // エディタ生成前に呼ぶ(初期 state のテーマ極性が決まる)
 initShowWhitespace(); // 同上(初期 state の空白文字表示の有無が決まる)
+initLineWrap(); // 同上(初期 state の折り返しの有無が決まる)
 const container = document.getElementById("editor-container");
 const view = createView(container, createEditorState("", () => {}));
 Tabs.initTabs(view);
@@ -214,6 +216,9 @@ listen("menu", async ({ payload }) => {
       break;
     case "toggle_whitespace":
       toggleShowWhitespace();
+      break;
+    case "toggle_wrap":
+      toggleLineWrap();
       break;
     case "quit":
       // 未保存確認を挟むため、終了メニューは PredefinedMenuItem::quit ではなく

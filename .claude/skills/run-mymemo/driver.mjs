@@ -202,6 +202,7 @@ function mockInit() {
           return;
         case "set_theme":
         case "set_show_whitespace":
+        case "set_line_wrap":
           return null;
         case "take_pending_open_files":
           // 起動と同時に Finder から渡されたファイル(モックでは常に無し)。

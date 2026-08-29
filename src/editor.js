@@ -633,6 +633,16 @@ export function setShowWhitespace(show) {
   return () => whitespaceCompartment.reconfigure(show ? whitespaceExtension : []);
 }
 
+// --- 行の折り返し(表示 > 行を折り返す) ---
+const wrapCompartment = new Compartment();
+let lineWrap = false;
+
+// 折り返し切替: 新規タブ用の既定値を更新し、既存 state 向け reconfigure エフェクトのファクトリを返す
+export function setLineWrap(wrap) {
+  lineWrap = wrap;
+  return () => wrapCompartment.reconfigure(wrap ? EditorView.lineWrapping : []);
+}
+
 // エディタ拡張一式。dirty 通知用の onChange を受け取る
 export function baseExtensions(onChange) {
   return [
@@ -666,6 +676,7 @@ export function baseExtensions(onChange) {
     eolField,
     eolHistory,
     whitespaceCompartment.of(showWhitespace ? whitespaceExtension : []),
+    wrapCompartment.of(lineWrap ? EditorView.lineWrapping : []),
     EditorView.updateListener.of((u) => {
       // 改行コードの統一とその undo/redo は本文を変えないが、保存内容が変わるので変更扱いにする
       const eolChanged = u.state.field(eolField) !== u.startState.field(eolField);

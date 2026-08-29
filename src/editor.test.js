@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { detectLanguage } from "./editor.js";
+import { EditorView } from "@codemirror/view";
+import { detectLanguage, createEditorState, setLineWrap } from "./editor.js";
 
 describe("detectLanguage", () => {
   it("拡張子から言語を検出する", () => {
@@ -66,5 +67,26 @@ describe("Tab キー", () => {
     press(view, { shiftKey: true });
     expect(view.state.doc.toString()).toBe("a\nb");
     view.destroy();
+  });
+});
+
+describe("行の折り返し", () => {
+  const wrapped = (view) => view.contentDOM.classList.contains("cm-lineWrapping");
+
+  it("setLineWrap は既存 state の reconfigure と新規 state の既定値の両方に効く", () => {
+    const parent = document.createElement("div");
+    setLineWrap(false);
+    const view = new EditorView({ state: createEditorState("abc", () => {}), parent });
+    expect(wrapped(view)).toBe(false);
+
+    view.dispatch({ effects: setLineWrap(true)() });
+    expect(wrapped(view)).toBe(true);
+
+    // 切替後に作った state(新規タブ)は折り返しが有効
+    const view2 = new EditorView({ state: createEditorState("abc", () => {}), parent });
+    expect(wrapped(view2)).toBe(true);
+
+    view.dispatch({ effects: setLineWrap(false)() });
+    expect(wrapped(view)).toBe(false);
   });
 });
