@@ -5,6 +5,9 @@ Mac 向けの軽量テキストエディタ(Tauri 2 + CodeMirror 6)。
 ## 機能
 
 - **タブ**: 複数ファイルをタブで切り替え(未保存は ● 表示)
+- **Finder から開く**: 右クリック「このアプリケーションで開く」、ダブルクリック(既定アプリに設定した場合)、Dock アイコンやウインドウへのドラッグ&ドロップでファイルを開ける
+  - テキスト系の拡張子(txt / md / log / csv / json / yaml / toml / xml / html / css / js / ts / py / rs / sh など)と、macOS がテキスト(`public.text`)と判定するファイルを対象として宣言している。それ以外のファイルは「その他…」から選ぶ
+  - 「このアプリケーションで開く」の候補には出るが、既定アプリを自動で奪わない設定(`LSHandlerRank = Alternate`)。既定にしたい場合は Finder の「情報を見る > このアプリケーションで開く > すべてを変更」で設定する
 - **矩形選択**: `Option + ドラッグ` で矩形選択 → `Cmd+C` / `Cmd+X` で列単位のコピー・切り取り
 - **検索・置換**: `Cmd+F` で検索パネル(パネル内の「regexp」トグルで正規表現)。置換もパネル内で可能
 - **grep**: `Cmd+Shift+F` でフォルダ横断検索。結果クリックで該当行へジャンプ
@@ -41,11 +44,19 @@ npm run tauri dev     # 開発起動
 npm run tauri build   # .app 生成 → src-tauri/target/release/bundle/macos/mymemo.app
 ```
 
+生成した `.app` は `/Applications` にコピーして使う。Finder の「このアプリケーションで開く」に出てこない場合は、LaunchServices に手動で登録し直す:
+
+```sh
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/mymemo.app
+```
+
+`src-tauri/target/` 内のビルド成果物も LaunchServices に登録されると候補に mymemo が 2 つ並ぶので、その場合は `lsregister -u <target 内の mymemo.app>` で登録を外す。
+
 ## テスト
 
 ```sh
 npm test                        # フロントエンド (vitest): 言語検出・タブ管理
-cd src-tauri && cargo test      # Rust: エンコーディング判定・読み書き・grep
+cd src-tauri && cargo test      # Rust: エンコーディング判定・読み書き・grep・Finder から渡されたファイルの受け渡し
 ```
 
 ## grep の仕様・制約

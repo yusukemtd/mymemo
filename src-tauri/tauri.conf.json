@@ -23,8 +23,66 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
-    "icon": ["icons/icon.icns"],
-    "resources": { "locales/ja.lproj": "ja.lproj" }
+    "targets": [
+      "app"
+    ],
+    "icon": [
+      "icons/icon.icns"
+    ],
+    "resources": {
+      "locales/ja.lproj": "ja.lproj"
+    },
+    "fileAssociations": [
+      {
+        "name": "テキストファイル",
+        "ext": [
+          "txt",
+          "text",
+          "md",
+          "markdown",
+          "log",
+          "csv",
+          "tsv",
+          "json",
+          "yaml",
+          "yml",
+          "toml",
+          "ini",
+          "cfg",
+          "conf",
+          "env",
+          "xml",
+          "html",
+          "htm",
+          "css",
+          "js",
+          "mjs",
+          "cjs",
+          "ts",
+          "jsx",
+          "tsx",
+          "py",
+          "rb",
+          "rs",
+          "go",
+          "java",
+          "kt",
+          "swift",
+          "c",
+          "h",
+          "cpp",
+          "hpp",
+          "sh",
+          "zsh",
+          "bash",
+          "sql"
+        ],
+        "contentTypes": [
+          "public.text"
+        ],
+        "role": "Editor",
+        "rank": "Alternate"
+      }
+    ]
   }
 }

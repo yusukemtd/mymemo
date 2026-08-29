@@ -60,6 +60,7 @@ od -c /tmp/mymemo-run/memo-crlf.txt | head -3
 | `save` / `saveas <path> [enc] [eol]` | 保存して dirty が消えるまで待つ |
 | `doc` / `tabs` / `status` / `text <sel>` / `eval <js>` | 状態の観察。`eval` では `window.__mymemo.view()` で EditorView が取れる |
 | `calls` | モックが受けた `invoke` の一覧(引数付き)を表示してクリア。Rust 側に何が渡るかの確認に |
+| `emit <event> <json>` | 任意の Tauri イベントを発火。Finder の「このアプリケーションで開く」は `emit open-files ["/path/a.txt"]` で再現できる(起動と同時に渡された分を引き取る `take_pending_open_files` はモックでは常に空) |
 | `ss <file.png>` | スクリーンショット(1100x750) |
 | `waitfor <selector> [ms]` / `wait <ms>` | 待ち |
 

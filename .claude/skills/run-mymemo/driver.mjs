@@ -203,6 +203,10 @@ function mockInit() {
         case "set_theme":
         case "set_show_whitespace":
           return null;
+        case "take_pending_open_files":
+          // 起動と同時に Finder から渡されたファイル(モックでは常に無し)。
+          // 起動後に渡される経路は `emit open-files ["<path>"]` で再現できる
+          return [];
         case "plugin:dialog|message": {
           // plugin-dialog の confirm()/ask() も message コマンドに buttons 付きで来て、
           // 戻り値は押されたボタンのラベル文字列("Ok"/"Yes" など)。真偽値ではないので注意

@@ -237,6 +237,18 @@ getCurrentWebview().onDragDropEvent(async ({ payload }) => {
   }
 });
 
+// --- Finder の「このアプリケーションで開く」・ダブルクリック・Dock へのドロップで開く ---
+// Rust 側(open_files.rs)が RunEvent::Opened を "open-files" に変換して送ってくる。
+// 起動と同時に渡されたファイルはリスナー登録前に届くため Rust 側に溜まっており、
+// リスナー登録が完了してから take_pending_open_files で引き取る(順序を保証するため直列にする)
+listen("open-files", async ({ payload }) => {
+  for (const path of payload) await openFile(path);
+})
+  .then(() => invoke("take_pending_open_files"))
+  .then(async (paths) => {
+    for (const path of paths) await openFile(path);
+  });
+
 // --- Cmd+スクロールでフォントサイズ変更 ---
 let fontSize = 13;
 

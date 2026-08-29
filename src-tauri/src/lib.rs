@@ -1,6 +1,7 @@
 mod dialog;
 mod file_io;
 mod grep;
+mod open_files;
 
 use tauri::menu::{
     AboutMetadataBuilder, CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder,
@@ -54,6 +55,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // Finder から起動と同時に渡されるファイルの受け口。起動時の RunEvent::Opened は
+        // setup より前に届くので、setup 内の manage ではなくここで登録する(open_files.rs 参照)
+        .manage(open_files::OpenFilesState::default())
         .setup(|app| {
             let about = AboutMetadataBuilder::new()
                 .name(Some("mymemo"))
@@ -214,11 +218,19 @@ pub fn run() {
             quit_app,
             set_theme,
             set_show_whitespace,
+            open_files::take_pending_open_files,
             grep::grep_search,
             file_io::read_file,
             file_io::write_file,
             dialog::save_dialog_with_options
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| match event {
+            // Finder の「このアプリケーションで開く」・ダブルクリック・Dock へのドロップ。
+            // macOS は argv ではなく Apple Event でファイルを渡すのでここで受ける
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Opened { urls } => open_files::handle_opened(app, urls),
+            _ => {}
+        });
 }
