@@ -354,6 +354,19 @@ body,
 }
 
 /* --- status bar --- */
+#status-encoding,
+#status-eol {
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+#status-encoding:hover,
+#status-eol:hover {
+  background: var(--bg-element-hover);
+  color: var(--fg-primary);
+}
+
 #statusbar {
   flex-shrink: 0;
   display: flex;

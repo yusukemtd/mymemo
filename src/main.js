@@ -221,6 +221,18 @@ window.addEventListener("active-tab-changed", updateStatusBar);
 window.addEventListener("cursor-moved", updateStatusBar);
 updateStatusBar();
 
+// ステータスバーの文字コード・改行コードをクリックすると変更メニュー(Rust 側のポップアップ)が出る
+statusEnc.addEventListener("click", () => {
+  const tab = Tabs.getActiveTab();
+  if (tab) invoke("popup_status_menu", { kind: "encoding", current: tab.encoding }).catch(console.error);
+});
+statusEol.addEventListener("click", () => {
+  const summary = lineEndingSummary(view.state);
+  invoke("popup_status_menu", { kind: "eol", current: summary.mixed ? "" : summary.dominant }).catch(
+    console.error
+  );
+});
+
 // タブ・本文・カーソルが変わったらセッションを保存する(1 秒のデバウンス。終了直前にも保存する)
 window.addEventListener("active-tab-changed", scheduleSaveSession);
 window.addEventListener("cursor-moved", scheduleSaveSession);
@@ -280,6 +292,12 @@ listen("menu", async ({ payload }) => {
   }
   if (payload.startsWith("transform:")) {
     applyLineTransform(view, payload.slice("transform:".length));
+    view.focus();
+    return;
+  }
+  if (payload.startsWith("set_enc:")) {
+    // 保存時の文字コードを変える(読み直しはしない。読み直すなら「文字コードを指定して開く」)
+    Tabs.setEncoding(Tabs.getActiveTab(), payload.slice("set_enc:".length));
     view.focus();
     return;
   }

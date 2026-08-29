@@ -150,6 +150,14 @@ export function convertLineEndings(tab, lineEnding) {
   }
 }
 
+// 保存時の文字コードを変える(本文は変えない。保存すると別のバイト列になるので未保存扱いにする)
+export function setEncoding(tab, encoding) {
+  if (!tabs.includes(tab) || tab.encoding === encoding) return;
+  tab.encoding = encoding;
+  tab.dirty = true;
+  render();
+}
+
 // アクティブでないタブも含め、指定タブのインデント設定を変える(ステータスバー・メニューは render で追従)
 export function setIndent(tab, settings) {
   if (!tabs.includes(tab)) return;

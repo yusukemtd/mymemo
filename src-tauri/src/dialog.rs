@@ -6,7 +6,7 @@ use objc2_app_kit::{NSPopUpButton, NSSavePanel, NSTextField, NSView};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use serde::Serialize;
 
-const ENCODINGS: [&str; 5] = ["UTF-8", "CP932", "EUC-JP", "UTF-16LE", "UTF-16BE"];
+pub(crate) const ENCODINGS: [&str; 5] = ["UTF-8", "CP932", "EUC-JP", "UTF-16LE", "UTF-16BE"];
 pub(crate) const LINE_ENDINGS: [&str; 3] = ["LF", "CRLF", "CR"];
 // 改行コードを変換せず行ごとの現状を保持する選択(先頭項目)。フロントエンドはこの値で判定する
 const KEEP_LINE_ENDING: &str = "KEEP";

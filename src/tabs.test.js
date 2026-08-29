@@ -31,6 +31,17 @@ describe("tabs", () => {
     invoke.mockClear();
   });
 
+  it("setEncoding は文字コードを変えて未保存扱いにし、同じ値なら何もしない", async () => {
+    const { tabs } = await loadTabs();
+    const tab = tabs.newTab("/a.txt", "abc", "UTF-8");
+    tabs.setEncoding(tab, "UTF-8");
+    expect(tab.dirty).toBe(false);
+    tabs.setEncoding(tab, "CP932");
+    expect(tab.encoding).toBe("CP932");
+    expect(tab.dirty).toBe(true);
+    expect(tabs.stateOf(tab).doc.toString()).toBe("abc"); // 本文は変わらない
+  });
+
   it("開いた内容の字下げからインデント設定を判定し、setIndent で変えられる", async () => {
     const { tabs, view } = await loadTabs();
     const { indentOf } = await import("./editor.js");

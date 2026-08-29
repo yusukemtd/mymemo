@@ -4,8 +4,8 @@ mod grep;
 mod open_files;
 
 use tauri::menu::{
-    AboutMetadataBuilder, CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder,
-    PredefinedMenuItem, Submenu, SubmenuBuilder,
+    AboutMetadataBuilder, CheckMenuItem, CheckMenuItemBuilder, ContextMenu, MenuBuilder,
+    MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder,
 };
 use tauri::{Emitter, Manager};
 
@@ -68,6 +68,38 @@ fn set_indent(
         item.set_checked(*size == tab_size).map_err(|e| e.to_string())?;
     }
     items.soft.set_checked(soft_tabs).map_err(|e| e.to_string())
+}
+
+// ステータスバーの文字コード・改行コードをクリックしたときのポップアップメニュー。
+// 項目 ID はメニューバーの「編集 > 文字コードを変換 / 改行コードを変換」と同じなので、選択は同じ menu イベントで届く。
+// current に一致する項目にチェックを付ける(改行コードが混在なら空文字でどれにも付かない)
+#[tauri::command]
+fn popup_status_menu(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    kind: String,
+    current: String,
+) -> Result<(), String> {
+    let err = |e: tauri::Error| e.to_string();
+    let (prefix, values): (&str, &[&str]) = match kind.as_str() {
+        "encoding" => ("set_enc:", &dialog::ENCODINGS[..]),
+        "eol" => ("convert_eol:", &dialog::LINE_ENDINGS[..]),
+        _ => return Err(format!("未知のメニュー: {kind}")),
+    };
+    let mut items = Vec::new();
+    for v in values {
+        items.push(
+            CheckMenuItemBuilder::with_id(format!("{prefix}{v}"), *v)
+                .checked(*v == current)
+                .build(&app)
+                .map_err(err)?,
+        );
+    }
+    let mut builder = MenuBuilder::new(&app);
+    for item in &items {
+        builder = builder.item(item);
+    }
+    builder.build().map_err(err)?.popup(window).map_err(err)
 }
 
 // 「表示 > 行を折り返す」の CheckMenuItem ハンドル(チェック状態の同期用)
@@ -246,6 +278,16 @@ pub fn run() {
                     }
                     eol_menu.build()?
                 })
+                .item(&{
+                    // 保存時の文字コードを変える(本文は変えない)。フロントで Tabs.setEncoding を適用する
+                    let mut enc_menu = SubmenuBuilder::new(app, "文字コードを変換");
+                    for enc in dialog::ENCODINGS {
+                        enc_menu = enc_menu.item(
+                            &MenuItemBuilder::with_id(format!("set_enc:{enc}"), enc).build(app)?,
+                        );
+                    }
+                    enc_menu.build()?
+                })
                 .item(&indent_menu)
                 .separator()
                 .item(&{
@@ -367,6 +409,7 @@ pub fn run() {
             set_line_wrap,
             set_recent_files,
             set_indent,
+            popup_status_menu,
             open_files::take_pending_open_files,
             grep::grep_search,
             grep::grep_replace,
