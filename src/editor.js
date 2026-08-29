@@ -49,6 +49,7 @@ import {
 import { languages } from "@codemirror/language-data";
 import { closeBrackets, closeBracketsKeymap, autocompletion, completeAnyWord } from "@codemirror/autocomplete";
 import { markdownKeymap, pasteURLAsLink } from "@codemirror/lang-markdown";
+import { indentListItem, dedentListItem } from "./markdown.js";
 import { getDefaultIndent } from "./indent.js";
 import { countMatches, describeMatches, replaceInSelection } from "./searchtools.js";
 import { tags as t } from "@lezer/highlight";
@@ -128,9 +129,12 @@ export function languageEffect(support, extras = []) {
 }
 
 // Markdown の入力支援: Enter でリスト・引用・チェックボックスを次の行に継続(空の項目で Enter すると終える)、
-// Backspace で行頭のマークアップを消す、テキストを選んで URL を貼り付けると [テキスト](URL) にする。
-// Markdown と判定されたタブにだけ入れる
-export const markdownExtras = [keymap.of(markdownKeymap), pasteURLAsLink];
+// Backspace で行頭のマークアップを消す、テキストを選んで URL を貼り付けると [テキスト](URL) にする、
+// リスト行の Tab / Shift+Tab で項目をネスト / 解除する。Markdown と判定されたタブにだけ入れる
+export const markdownExtras = [
+  keymap.of([...markdownKeymap, { key: "Tab", run: indentListItem, shift: dedentListItem }]),
+  pasteURLAsLink,
+];
 
 // 色は themes.css の --syn-* トークンを参照するため、単一定義で全テーマに追従する
 const highlightStyle = HighlightStyle.define([

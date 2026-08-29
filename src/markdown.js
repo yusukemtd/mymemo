@@ -1,4 +1,5 @@
 import { EditorSelection } from "@codemirror/state";
+import { indentMore, indentLess } from "@codemirror/commands";
 
 // Markdown の書式ショートカット(編集 > Markdown): 選択範囲(複数可)をマーカーで囲む / 既に囲まれていれば外す。
 // 選択が無ければマーカーの対を挿入してその間にカーソルを置く(対の間にカーソルがあれば対を消す)。
@@ -153,6 +154,20 @@ export function toggleCheckbox(view) {
   if (!changes.length) return false;
   dispatchLineChanges(view, changes);
   return true;
+}
+
+// リスト行で Tab / Shift+Tab: 項目をネスト / 解除する(インデント設定の単位で字下げ)。
+// 選択範囲があるとき・カーソル行がリスト項目でないときは false を返して既定の Tab に任せる
+function allCursorsOnListLines(state) {
+  return state.selection.ranges.every((r) => r.empty && LIST_RE.test(state.doc.lineAt(r.head).text));
+}
+
+export function indentListItem(view) {
+  return allCursorsOnListLines(view.state) ? indentMore(view) : false;
+}
+
+export function dedentListItem(view) {
+  return allCursorsOnListLines(view.state) ? indentLess(view) : false;
 }
 
 // 行頭への挿入でカーソルがマークの前に取り残されないよう、選択は挿入の後ろ側へ写像する

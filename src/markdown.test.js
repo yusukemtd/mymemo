@@ -270,3 +270,29 @@ describe("URL の貼り付けでリンク化(pasteURLAsLink)", () => {
     plain.destroy();
   });
 });
+
+describe("リスト行の Tab / Shift+Tab(ネスト / 解除)", () => {
+  it("カーソル行がリスト項目なら字下げし、Shift+Tab で戻す。リスト行以外は従来どおりタブ文字", async () => {
+    const view = await markdownView("- a\n- b\ntext");
+    view.dispatch({ selection: { anchor: 6 } }); // "- b" の途中
+    key(view, "Tab");
+    expect(view.state.doc.toString()).toBe("- a\n\t- b\ntext");
+    key(view, "Tab", { shiftKey: true });
+    expect(view.state.doc.toString()).toBe("- a\n- b\ntext");
+    view.dispatch({ selection: { anchor: 12 } }); // "text" の末尾
+    key(view, "Tab");
+    expect(view.state.doc.toString()).toBe("- a\n- b\ntext\t");
+    view.destroy();
+  });
+
+  it("番号付き・チェックボックス付きの行も対象。選択範囲があれば既定の動作(行インデント)", async () => {
+    const view = await markdownView("1. a\n- [ ] b");
+    view.dispatch({ selection: { anchor: 0 } });
+    key(view, "Tab");
+    expect(view.state.doc.toString()).toBe("\t1. a\n- [ ] b");
+    view.dispatch({ selection: { anchor: 6, head: 9 } });
+    key(view, "Tab");
+    expect(view.state.doc.toString()).toBe("\t1. a\n\t- [ ] b");
+    view.destroy();
+  });
+});
