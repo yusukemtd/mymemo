@@ -226,6 +226,7 @@ function mockInit() {
           return null;
         case "read_file":
         case "write_file":
+        case "file_mtime":
         case "grep_search":
           return bridge(cmd, args);
         default:
@@ -303,13 +304,24 @@ async function grepDir(dir, re, hits, limit) {
   return false;
 }
 
+// ファイルの更新時刻(UNIX ミリ秒)。無ければ null(Rust 側の mtime_of と同じ契約)
+async function mtimeOf(p) {
+  try {
+    return Math.round((await fs.stat(p)).mtimeMs);
+  } catch {
+    return null;
+  }
+}
+
 async function handleBridge(cmd, args) {
   switch (cmd) {
     case "read_file":
-      return decode(await fs.readFile(args.path), args.encoding ?? null);
+      return { ...decode(await fs.readFile(args.path), args.encoding ?? null), mtime: await mtimeOf(args.path) };
     case "write_file":
       await fs.writeFile(args.path, encode(args.content, args.encoding));
-      return null;
+      return mtimeOf(args.path);
+    case "file_mtime":
+      return mtimeOf(args.path);
     case "grep_search": {
       const src = args.isRegex ? args.pattern : args.pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const re = new RegExp(src, args.caseSensitive ? "" : "i");

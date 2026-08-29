@@ -97,7 +97,7 @@ export async function restoreSession(readFile, session = loadSession()) {
       } catch {
         continue;
       }
-      tab = Tabs.newTab(entry.path, file.content, file.encoding);
+      tab = Tabs.newTab(entry.path, file.content, file.encoding, file.mtime ?? null);
     } else {
       tab = Tabs.newTab(null, entry.draft);
       Tabs.markDirtyTab(tab); // 下書きは未保存の内容なので ● を付ける

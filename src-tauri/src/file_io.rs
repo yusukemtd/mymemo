@@ -1,6 +1,7 @@
 use encoding_rs::{Encoding, EUC_JP, SHIFT_JIS, UTF_8};
 use serde::Serialize;
 use std::fs;
+use std::time::UNIX_EPOCH;
 
 // content は改行コードを正規化しない生テキスト。改行コード(行ごとの LF/CR/CRLF)は
 // フロントエンド側で分離・保持し、保存時も復元済みのテキストを受け取ってそのまま書く
@@ -9,6 +10,23 @@ pub struct FileContent {
     pub content: String,
     pub encoding: String,
     pub lossy: bool,
+    /// 読んだ時点の更新時刻(UNIX エポックからのミリ秒)。ディスク上の変更検知に使う
+    pub mtime: Option<u64>,
+}
+
+// ファイルの更新時刻(UNIX エポックからのミリ秒)。無い・取れない場合は None
+pub(crate) fn mtime_of(path: &str) -> Option<u64> {
+    let modified = fs::metadata(path).ok()?.modified().ok()?;
+    modified
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
+}
+
+// フォーカス時と保存前の変更検知用。ファイルが無ければ None
+#[tauri::command]
+pub fn file_mtime(path: String) -> Option<u64> {
+    mtime_of(&path)
 }
 
 fn encoding_for(name: &str) -> Result<&'static Encoding, String> {
@@ -78,18 +96,23 @@ fn read_file_impl(path: String, encoding: Option<String>) -> Result<FileContent,
         content: text,
         encoding: display_name(enc),
         lossy,
+        mtime: mtime_of(&path),
     })
 }
 
-// content は改行コードを含めて完成したテキスト(変換しない)
+// content は改行コードを含めて完成したテキスト(変換しない)。書いた後の更新時刻を返す
 #[tauri::command]
-pub async fn write_file(path: String, content: String, encoding: String) -> Result<(), String> {
+pub async fn write_file(
+    path: String,
+    content: String,
+    encoding: String,
+) -> Result<Option<u64>, String> {
     tauri::async_runtime::spawn_blocking(move || write_file_impl(path, content, encoding))
         .await
         .map_err(|e| format!("保存スレッドエラー: {e}"))?
 }
 
-fn write_file_impl(path: String, text: String, encoding: String) -> Result<(), String> {
+fn write_file_impl(path: String, text: String, encoding: String) -> Result<Option<u64>, String> {
     let enc = encoding_for(&encoding)?;
     let bytes: Vec<u8> = if enc.name().starts_with("UTF-16") {
         // encoding_rs は UTF-16 エンコード非対応のため手動で変換(BOM 付き)
@@ -113,7 +136,8 @@ fn write_file_impl(path: String, text: String, encoding: String) -> Result<(), S
         }
         bytes.into_owned()
     };
-    fs::write(&path, bytes).map_err(|e| format!("保存エラー: {e}"))
+    fs::write(&path, bytes).map_err(|e| format!("保存エラー: {e}"))?;
+    Ok(mtime_of(&path))
 }
 
 #[cfg(test)]
@@ -209,6 +233,28 @@ mod tests {
         assert_eq!(&bytes[..2], &[0xFF, 0xFE]);
         let r = read_file_impl(path, None).unwrap(); // BOM から自動判定される
         assert_eq!(r.content, "あA");
+    }
+
+    #[test]
+    fn read_and_write_report_mtime() {
+        let dir = tempdir().unwrap();
+        let path = write_bytes(&dir, "m.txt", b"abc");
+        let r = read_file_impl(path.clone(), None).unwrap();
+        assert_eq!(r.mtime, mtime_of(&path));
+        assert!(r.mtime.is_some());
+
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let written = write_file_impl(path.clone(), "abcd".into(), "UTF-8".into()).unwrap();
+        assert_eq!(written, mtime_of(&path));
+        assert!(written > r.mtime); // 書き換えで更新時刻が進む
+    }
+
+    #[test]
+    fn mtime_of_missing_file_is_none() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("none.txt").to_string_lossy().into_owned();
+        assert_eq!(mtime_of(&path), None);
+        assert_eq!(file_mtime(path), None);
     }
 
     #[test]

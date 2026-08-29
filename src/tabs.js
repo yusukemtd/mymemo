@@ -75,8 +75,9 @@ export function revealCursor() {
   });
 }
 
-// content は改行コード混在可の生テキスト(改行コードは state 側で行ごとに保持される)
-export function newTab(path = null, content = "", encoding = "UTF-8") {
+// content は改行コード混在可の生テキスト(改行コードは state 側で行ごとに保持される)。
+// mtime は読んだ時点のファイル更新時刻(UNIX ミリ秒。ディスク上の変更検知に使う。不明なら null)
+export function newTab(path = null, content = "", encoding = "UTF-8", mtime = null) {
   untitledCount += path ? 0 : 1;
   const tab = {
     path,
@@ -84,6 +85,7 @@ export function newTab(path = null, content = "", encoding = "UTF-8") {
     state: createEditorState(content, markDirty),
     dirty: false,
     encoding,
+    mtime,
   };
   saveCurrentState();
   tabs.push(tab);
@@ -197,24 +199,44 @@ export async function closeTab(index, onConfirmClose, quitIfLast = true) {
 }
 
 // 空の無題タブをファイル内容で置き換える
-export function replaceActiveTab(path, content, encoding = "UTF-8") {
+export function replaceActiveTab(path, content, encoding = "UTF-8", mtime = null) {
   const t = tabs[activeIndex];
-  if (!t) return;
+  if (!t) return null;
   t.path = path;
   t.name = path.split("/").pop();
   t.dirty = false;
   t.encoding = encoding;
+  t.mtime = mtime;
   t.state = createEditorState(content, markDirty);
   view.setState(t.state);
   applyLanguage(t);
   render();
+  return t;
+}
+
+// ディスクから読み直した内容でタブの本文を差し替える(外部変更の反映・保存済みの状態に戻す)。
+// カーソル位置は本文長の範囲で保つ。undo 履歴は引き継がない
+export function replaceContent(tab, content, encoding, mtime = null) {
+  if (!tabs.includes(tab)) return;
+  const { anchor, head } = stateOf(tab).selection.main;
+  tab.state = createEditorState(content, markDirty);
+  tab.encoding = encoding;
+  tab.mtime = mtime;
+  tab.dirty = false;
+  const active = tabs[activeIndex] === tab;
+  if (active) view.setState(tab.state);
+  setSelection(tab, { anchor, head });
+  if (active) revealCursor();
+  applyLanguage(tab);
+  render();
 }
 
 // 保存完了時に呼ぶ。保存待ちの間にアクティブタブが切り替わっても
-// 正しいタブへ反映されるよう、対象タブを引数で受け取る
-export function markSaved(tab, path) {
+// 正しいタブへ反映されるよう、対象タブを引数で受け取る。mtime は書いた後の更新時刻
+export function markSaved(tab, path, mtime = null) {
   if (!tabs.includes(tab)) return; // 保存中に閉じられたタブは無視
   tab.dirty = false;
+  tab.mtime = mtime;
   if (path) {
     tab.path = path;
     tab.name = path.split("/").pop();

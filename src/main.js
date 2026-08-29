@@ -16,6 +16,7 @@ import { initLineWrap, toggleLineWrap } from "./wrap.js";
 import { initFontSize, zoomIn, zoomOut, resetFontSize } from "./fontsize.js";
 import { initGrep, toggleGrep } from "./grep.js";
 import { saveSession, scheduleSaveSession, restoreSession } from "./session.js";
+import { checkExternalChanges, needsOverwriteConfirm, reloadTab } from "./external.js";
 import {
   initRecentFiles,
   addRecentFile,
@@ -89,9 +90,40 @@ async function openFile(path = null, encoding = null) {
   const active = Tabs.getActiveTab();
   // 空の無題タブなら再利用する
   if (active && !active.path && !active.dirty && view.state.doc.length === 0) {
-    Tabs.replaceActiveTab(path, file.content, file.encoding);
+    Tabs.replaceActiveTab(path, file.content, file.encoding, file.mtime ?? null);
   } else {
-    Tabs.newTab(path, file.content, file.encoding);
+    Tabs.newTab(path, file.content, file.encoding, file.mtime ?? null);
+  }
+}
+
+// ディスク上の変更検知(external.js)に渡す IPC とダイアログ
+const externalDeps = {
+  fileMtime: (path) => invoke("file_mtime", { path }),
+  readFile: (path, encoding) => invoke("read_file", { path, encoding }),
+  confirm: (tab) =>
+    confirm(
+      `「${tab.name}」はディスク上で変更されています。未保存の編集内容を破棄して読み直しますか?`,
+      { title: "mymemo", kind: "warning" }
+    ),
+};
+
+// 「ファイル > 保存済みの状態に戻す」: 編集を捨ててディスクの内容を読み直す
+async function revertFile() {
+  const tab = Tabs.getActiveTab();
+  if (!tab?.path) return;
+  if (
+    tab.dirty &&
+    !(await confirm(`「${tab.name}」の編集内容を破棄して保存済みの状態に戻しますか?`, {
+      title: "mymemo",
+      kind: "warning",
+    }))
+  ) {
+    return;
+  }
+  try {
+    await reloadTab(tab, externalDeps.readFile);
+  } catch (err) {
+    await message(String(err), { title: "mymemo", kind: "error" });
   }
 }
 
@@ -115,11 +147,27 @@ async function saveFile(as = false) {
     path = choice.path;
     encoding = choice.encoding;
     if (choice.line_ending !== "KEEP") convertTo = choice.line_ending;
+  } else {
+    // 上書き保存: 開いた後にディスク上で変更されていれば確認する(別名保存は OS の置換確認に任せる)
+    let disk = null;
+    try {
+      disk = await invoke("file_mtime", { path });
+    } catch {}
+    if (
+      needsOverwriteConfirm(tab, disk) &&
+      !(await confirm(`「${tab.name}」は開いた後にディスク上で変更されています。上書きしますか?`, {
+        title: "mymemo",
+        kind: "warning",
+      }))
+    ) {
+      return false;
+    }
   }
   // 改行コードは行ごとに保持しているのでフロント側で復元し、Rust 側はそのまま書く
   const content = docWithLineEndings(Tabs.stateOf(tab), convertTo);
+  let mtime = null;
   try {
-    await invoke("write_file", { path, content, encoding });
+    mtime = await invoke("write_file", { path, content, encoding });
     tab.encoding = encoding;
   } catch (err) {
     await message(String(err), { title: "mymemo", kind: "error" });
@@ -127,7 +175,7 @@ async function saveFile(as = false) {
   }
   // 統一を選んだ場合は保存に成功してからエディタ側の改行コードを揃える
   if (convertTo) Tabs.convertLineEndings(tab, convertTo);
-  Tabs.markSaved(tab, path);
+  Tabs.markSaved(tab, path, mtime ?? null);
   addRecentFile(path);
   return true;
 }
@@ -235,6 +283,10 @@ listen("menu", async ({ payload }) => {
       break;
     case "save_as":
       await saveFile(true);
+      break;
+    case "revert":
+      await revertFile();
+      view.focus();
       break;
     case "recent_clear":
       clearRecentFiles();
@@ -349,4 +401,9 @@ async function confirmQuit() {
 
 getCurrentWindow().onCloseRequested(async (event) => {
   if (!(await confirmQuit())) event.preventDefault();
+});
+
+// --- ウィンドウが前面に戻ったら、開いているファイルがディスク上で変更されていないか確認する ---
+getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+  if (focused) checkExternalChanges(externalDeps);
 });

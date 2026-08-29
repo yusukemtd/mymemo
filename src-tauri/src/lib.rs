@@ -179,6 +179,7 @@ pub fn run() {
                         .accelerator("CmdOrCtrl+Shift+S")
                         .build(app)?,
                 )
+                .item(&MenuItemBuilder::with_id("revert", "保存済みの状態に戻す").build(app)?)
                 .separator()
                 .item(
                     &MenuItemBuilder::with_id("close_tab", "タブを閉じる")
@@ -316,6 +317,7 @@ pub fn run() {
             grep::grep_search,
             file_io::read_file,
             file_io::write_file,
+            file_io::file_mtime,
             dialog::save_dialog_with_options
         ])
         .build(tauri::generate_context!())

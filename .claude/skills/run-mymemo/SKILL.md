@@ -55,7 +55,7 @@ od -c /tmp/mymemo-run/memo-crlf.txt | head -3
 | `type <text>` | フォーカス中の要素に入力。`\n` で改行。何もフォーカスしていなければエディタへ |
 | `key <combo>` | `Enter` `Backspace` `End` `ArrowDown` `Meta+z` `Meta+Shift+z` `Escape` … |
 | `click <selector>` | 要素中心をクリック |
-| `menu <id>` | ネイティブメニュー相当。`new` `open` `save` `save_as` `close_tab` `find` `grep` `goto_line` `toggle_whitespace` `toggle_wrap` `zoom_in` `zoom_out` `zoom_reset` `quit` `theme:light` `theme:solarized-dark` `open_enc:CP932` `recent:0`(最近使ったファイルの 0 番目) `recent_clear` |
+| `menu <id>` | ネイティブメニュー相当。`new` `open` `save` `save_as` `revert` `close_tab` `find` `grep` `goto_line` `toggle_whitespace` `toggle_wrap` `zoom_in` `zoom_out` `zoom_reset` `quit` `theme:light` `theme:solarized-dark` `open_enc:CP932` `recent:0`(最近使ったファイルの 0 番目) `recent_clear` |
 | `dialog open <path\|null>` / `dialog confirm <true\|false>` / `dialog save <path> [enc] [KEEP\|LF\|CRLF\|CR]` | 次に出るダイアログの戻り値を仕込む |
 | `save` / `saveas <path> [enc] [eol]` | 保存して dirty が消えるまで待つ |
 | `doc` / `tabs` / `status` / `text <sel>` / `eval <js>` | 状態の観察。`eval` では `window.__mymemo.view()` で EditorView が取れる |
@@ -138,6 +138,7 @@ CP932 / EUC-JP / UTF-16 の判定と書き込みは `cargo test`(`src-tauri/src/
 - **grep ジャンプ行のクラスは `.cm-grep-jump`** で 1.5 秒後に消える。`waitfor .cm-grep-jump 2000` で拾える。
 - **native.mjs の `--type` は IME を通る**: 入力ソースが日本語のままだと `native hello` が「ナチヴェへっぉ」+ 変換候補になる(スクリーンショットで確認)。文字列の検証は driver.mjs で行い、native は起動確認と見た目だけに使う。
 - **native.mjs はウィンドウ出現までの間 System Events が `-1728` を返す**(`process "mymemo" を取り出すことはできません`)。0.5 秒間隔で最大 30 秒再試行する。
+- ディスク上の変更検知は `emit tauri://focus true`(ウィンドウのフォーカス復帰)で起動できる。ファイルの書き換えは driver と並行して `(sleep 3; echo x >> file) &` のようにシェル側から行う。
 - driver.mjs は `localStorage` が空の新規プロファイルで始まるので、テーマは常に `dark`・空白文字表示は ON・セッション復元なし(無題タブ 1 つ)から始まる。セッション復元は `eval localStorage.setItem("mymemo.session", ...)` → `eval location.reload()` → `wait 2000` で確認できる(モックはページ再読み込みでも再注入される)。
 - driver.mjs はポート 1420 が既に応答していればそれを再利用する(`npm run dev` を別で動かしていても可)。`native.mjs` 実行中は 1420 が使われているので driver.mjs と同時に走らせない。
 - Bash から driver.mjs を heredoc で呼ぶスクリプトをさらに heredoc で書くとき、外側の終端に `EOF` を使うと driver 用の `EOF` 行で切れる(この文書を書くときに踏んだ)。外側は別の終端語にする。zsh は `noclobber` で `>` の上書きを拒むので `>|`。
