@@ -115,6 +115,25 @@ body,
   outline: none;
 }
 
+/* --- コード折りたたみ(ガターの ▸▾ と折りたたんだ行の … ) --- */
+.cm-editor .cm-foldGutter span {
+  color: var(--ed-gutter-fg);
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.cm-editor .cm-foldGutter span:hover {
+  color: var(--fg-primary);
+}
+
+.cm-editor .cm-foldPlaceholder {
+  background: var(--bg-element);
+  border: 1px solid var(--border-mid);
+  color: var(--fg-secondary);
+  margin: 0 2px;
+  padding: 0 4px;
+}
+
 /* --- 空白文字・改行の可視化(editor.js の .mm-ws-* 装飾) ---
    半角スペース: 中点 / NBSP: 中点+枠(警告色) / 全角スペース: 枠 /
    タブ: 右向き矢印 / 行末: 改行コード別の記号(LF ↓ / CR ← / CRLF ↵) */

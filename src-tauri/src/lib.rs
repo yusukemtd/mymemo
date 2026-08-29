@@ -344,11 +344,38 @@ pub fn run() {
             };
             let whitespace_item = toggle_item("toggle_whitespace", "空白文字・改行を表示", true)?;
             let wrap_item = toggle_item("toggle_wrap", "行を折り返す", false)?;
+            let fold_gutter_item = toggle_item("toggle_fold_gutter", "折りたたみガターを表示", true)?;
+            // 折りたたみのキーは CodeMirror の foldKeymap と同じ。言語が判定できたファイルでだけ効く
+            let fold_menu = SubmenuBuilder::new(app, "折りたたみ")
+                .item(
+                    &MenuItemBuilder::with_id("fold_code", "折りたたむ")
+                        .accelerator("CmdOrCtrl+Alt+[")
+                        .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id("unfold_code", "展開")
+                        .accelerator("CmdOrCtrl+Alt+]")
+                        .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id("fold_all", "すべて折りたたむ")
+                        .accelerator("Ctrl+Alt+[")
+                        .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id("unfold_all", "すべて展開")
+                        .accelerator("Ctrl+Alt+]")
+                        .build(app)?,
+                )
+                .separator()
+                .item(&fold_gutter_item)
+                .build()?;
             let view_menu = SubmenuBuilder::new(app, "表示")
                 .item(&theme_sub.build()?)
                 .separator()
                 .item(&whitespace_item)
                 .item(&wrap_item)
+                .item(&fold_menu)
                 .separator()
                 .item(
                     &MenuItemBuilder::with_id("zoom_in", "拡大")

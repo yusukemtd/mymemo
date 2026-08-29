@@ -11,7 +11,8 @@ import {
 } from "./editor.js";
 import * as Tabs from "./tabs.js";
 import { initTheme, applyTheme } from "./theme.js";
-import { showWhitespace, lineWrap, TOGGLES } from "./toggles.js";
+import { showWhitespace, lineWrap, foldGutter, TOGGLES } from "./toggles.js";
+import { foldCode, unfoldCode, foldAll, unfoldAll } from "@codemirror/language";
 import { initFontSize, zoomIn, zoomOut, resetFontSize } from "./fontsize.js";
 import {
   initIndent,
@@ -41,6 +42,7 @@ import { listen } from "@tauri-apps/api/event";
 initTheme(); // エディタ生成前に呼ぶ(初期 state のテーマ極性が決まる)
 showWhitespace.init(); // 同上(初期 state の空白文字表示の有無が決まる)
 lineWrap.init(); // 同上(初期 state の折り返しの有無が決まる)
+foldGutter.init(); // 同上(初期 state の折りたたみガターの有無が決まる)
 initIndent(); // 同上(判定できないファイルのインデント既定値が決まる)
 const container = document.getElementById("editor-container");
 const view = createView(container, createEditorState("", () => {}));
@@ -373,6 +375,13 @@ listen("menu", async ({ payload }) => {
       break;
     case "zoom_reset":
       resetFontSize();
+      break;
+    case "fold_code":
+    case "unfold_code":
+    case "fold_all":
+    case "unfold_all":
+      ({ fold_code: foldCode, unfold_code: unfoldCode, fold_all: foldAll, unfold_all: unfoldAll })[payload](view);
+      view.focus();
       break;
     case "quit":
       // 未保存確認を挟むため、終了メニューは PredefinedMenuItem::quit ではなく

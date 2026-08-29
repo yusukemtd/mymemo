@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { applyToAllTabs } from "./tabs.js";
-import { setShowWhitespace, setLineWrap } from "./editor.js";
+import { setShowWhitespace, setLineWrap, setFoldGutter } from "./editor.js";
 
 // 表示・編集の ON/OFF 設定の共通部品。1 つの設定 = editor.js の setter(新規タブ用の既定値を更新し、
 // 既存 state 向けの reconfigure エフェクトを返す)+ ネイティブメニューのチェック同期(Rust 側の set_toggle。
@@ -52,5 +52,13 @@ export const lineWrap = createToggle({
   defaultValue: false,
 });
 
+// 折りたたみガター(既定は表示)。折りたたみ自体とキーは常時有効
+export const foldGutter = createToggle({
+  id: "toggle_fold_gutter",
+  storageKey: "mymemo.foldGutter",
+  setter: setFoldGutter,
+  defaultValue: true,
+});
+
 // メニュー項目 ID → 設定
-export const TOGGLES = Object.fromEntries([showWhitespace, lineWrap].map((t) => [t.id, t]));
+export const TOGGLES = Object.fromEntries([showWhitespace, lineWrap, foldGutter].map((t) => [t.id, t]));

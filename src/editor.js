@@ -42,6 +42,9 @@ import {
   syntaxHighlighting,
   HighlightStyle,
   LanguageDescription,
+  codeFolding,
+  foldGutter,
+  foldKeymap,
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { markdownKeymap } from "@codemirror/lang-markdown";
@@ -756,6 +759,16 @@ export const insertTabKey = (view) => {
   return true;
 };
 
+// --- コード折りたたみ(表示 > 折りたたみ)。折りたたみ自体とキーは常時有効で、ガターの表示だけ切り替える ---
+const foldGutterCompartment = new Compartment();
+let showFoldGutter = true;
+const foldGutterExtension = foldGutter({ openText: "▾", closedText: "▸" });
+
+export function setFoldGutter(show) {
+  showFoldGutter = show;
+  return () => foldGutterCompartment.reconfigure(show ? foldGutterExtension : []);
+}
+
 // --- 行の折り返し(表示 > 行を折り返す) ---
 const wrapCompartment = new Compartment();
 let lineWrap = false;
@@ -780,6 +793,8 @@ export function baseExtensions(onChange, indent = getDefaultIndent()) {
     crosshairCursor(),
     bracketMatching(),
     languageCompartment.of([]), // 言語は非同期で後から reconfigure される
+    codeFolding({ placeholderText: "…" }),
+    foldGutterCompartment.of(showFoldGutter ? foldGutterExtension : []),
     syntaxHighlighting(highlightStyle),
     indentOnInput(), // 言語なしでは no-op。indentUnit の4スペースを尊重
     highlightSelectionMatches(),
@@ -789,6 +804,7 @@ export function baseExtensions(onChange, indent = getDefaultIndent()) {
       ...defaultKeymap,
       ...historyKeymap,
       ...searchKeymap,
+      ...foldKeymap, // Cmd+Option+[ / ] で折りたたみ / 展開、Ctrl+Option+[ / ] ですべて
       // 既定では Tab はフォーカス移動。タブ文字(ソフトタブならスペース)を入力できるようにする
       // (選択範囲があればインデント、Shift+Tab でインデント解除)
       { key: "Tab", run: insertTabKey, shift: indentLess },
