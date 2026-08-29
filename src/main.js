@@ -12,6 +12,7 @@ import * as Tabs from "./tabs.js";
 import { initTheme, applyTheme } from "./theme.js";
 import { initShowWhitespace, toggleShowWhitespace } from "./whitespace.js";
 import { initLineWrap, toggleLineWrap } from "./wrap.js";
+import { initFontSize, zoomIn, zoomOut, resetFontSize } from "./fontsize.js";
 import { initGrep, toggleGrep } from "./grep.js";
 import { open, confirm, message } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
@@ -220,6 +221,15 @@ listen("menu", async ({ payload }) => {
     case "toggle_wrap":
       toggleLineWrap();
       break;
+    case "zoom_in":
+      zoomIn();
+      break;
+    case "zoom_out":
+      zoomOut();
+      break;
+    case "zoom_reset":
+      resetFontSize();
+      break;
     case "quit":
       // 未保存確認を挟むため、終了メニューは PredefinedMenuItem::quit ではなく
       // カスタム ID で受けてここで処理する
@@ -254,24 +264,15 @@ listen("open-files", async ({ payload }) => {
     for (const path of paths) await openFile(path);
   });
 
-// --- Cmd+スクロールでフォントサイズ変更 ---
-let fontSize = 13;
-
-function setFontSize(size) {
-  fontSize = Math.min(48, Math.max(8, size));
-  document.documentElement.style.setProperty(
-    "--editor-font-size",
-    `${fontSize}px`
-  );
-  view.requestMeasure();
-}
+// --- フォントサイズ(「表示 > 拡大 / 縮小 / 標準サイズ」と Cmd+スクロール。保存値を復元) ---
+initFontSize(() => view.requestMeasure());
 
 container.addEventListener(
   "wheel",
   (e) => {
     if (!e.metaKey) return;
     e.preventDefault();
-    setFontSize(fontSize + (e.deltaY < 0 ? 1 : -1));
+    (e.deltaY < 0 ? zoomIn : zoomOut)();
   },
   { passive: false }
 );

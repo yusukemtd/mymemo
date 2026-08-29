@@ -55,7 +55,7 @@ od -c /tmp/mymemo-run/memo-crlf.txt | head -3
 | `type <text>` | フォーカス中の要素に入力。`\n` で改行。何もフォーカスしていなければエディタへ |
 | `key <combo>` | `Enter` `Backspace` `End` `ArrowDown` `Meta+z` `Meta+Shift+z` `Escape` … |
 | `click <selector>` | 要素中心をクリック |
-| `menu <id>` | ネイティブメニュー相当。`new` `open` `save` `save_as` `close_tab` `find` `grep` `toggle_whitespace` `toggle_wrap` `quit` `theme:light` `theme:solarized-dark` `open_enc:CP932` |
+| `menu <id>` | ネイティブメニュー相当。`new` `open` `save` `save_as` `close_tab` `find` `grep` `toggle_whitespace` `toggle_wrap` `zoom_in` `zoom_out` `zoom_reset` `quit` `theme:light` `theme:solarized-dark` `open_enc:CP932` |
 | `dialog open <path\|null>` / `dialog confirm <true\|false>` / `dialog save <path> [enc] [KEEP\|LF\|CRLF\|CR]` | 次に出るダイアログの戻り値を仕込む |
 | `save` / `saveas <path> [enc] [eol]` | 保存して dirty が消えるまで待つ |
 | `doc` / `tabs` / `status` / `text <sel>` / `eval <js>` | 状態の観察。`eval` では `window.__mymemo.view()` で EditorView が取れる |

@@ -200,6 +200,22 @@ pub fn run() {
                 .separator()
                 .item(&whitespace_item)
                 .item(&wrap_item)
+                .separator()
+                .item(
+                    &MenuItemBuilder::with_id("zoom_in", "拡大")
+                        .accelerator("CmdOrCtrl+=")
+                        .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id("zoom_out", "縮小")
+                        .accelerator("CmdOrCtrl+-")
+                        .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id("zoom_reset", "標準サイズ")
+                        .accelerator("CmdOrCtrl+0")
+                        .build(app)?,
+                )
                 .build()?;
             app.manage(ThemeMenuItems(theme_items));
             app.manage(WhitespaceMenuItem(whitespace_item));
