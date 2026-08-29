@@ -45,6 +45,7 @@ import {
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
 import { getDefaultIndent } from "./indent.js";
+import { countMatches, describeMatches, replaceInSelection } from "./searchtools.js";
 import { tags as t } from "@lezer/highlight";
 import {
   search,
@@ -141,7 +142,7 @@ const highlightStyle = HighlightStyle.define([
   { tag: t.invalid, color: "var(--syn-invalid)" },
 ]);
 
-// カスタム検索・置換パネル(日本語、単語単位なし、閉じるボタン付き)
+// カスタム検索・置換パネル(日本語、単語単位なし、閉じるボタン・一致件数・選択範囲内の置換付き)
 function createSearchPanel(view) {
   const dom = document.createElement("div");
   dom.className = "mm-search";
@@ -190,11 +191,31 @@ function createSearchPanel(view) {
   const spacer = document.createElement("span");
   spacer.className = "mm-search-spacer";
 
+  // 一致件数("3 / 12 件")。本文・検索語の変化では全文を数え直すので少し遅らせ、選択の変化は即時に番号だけ更新する
+  const countEl = document.createElement("span");
+  countEl.className = "mm-search-count";
+  let lastQuery = getSearchQuery(view.state);
+  let matches = countMatches(view.state, lastQuery);
+  let recountTimer = null;
+  const showCount = (state) => {
+    countEl.textContent = describeMatches(lastQuery, matches, state.selection.main);
+  };
+  const scheduleRecount = () => {
+    clearTimeout(recountTimer);
+    recountTimer = setTimeout(() => {
+      recountTimer = null;
+      lastQuery = getSearchQuery(view.state);
+      matches = countMatches(view.state, lastQuery);
+      showCount(view.state);
+    }, 100);
+  };
+
   row1.append(
     searchInput,
     mkButton("前へ", findPrevious),
     mkButton("次へ", findNext),
     mkButton("すべて選択", selectMatches),
+    countEl,
     regexWrap,
     caseWrap,
     spacer,
@@ -203,7 +224,8 @@ function createSearchPanel(view) {
   row2.append(
     replaceInput,
     mkButton("置換", replaceNext),
-    mkButton("すべて置換", replaceAll)
+    mkButton("すべて置換", replaceAll),
+    mkButton("選択範囲内を置換", replaceInSelection)
   );
 
   function commit() {
@@ -243,12 +265,21 @@ function createSearchPanel(view) {
   regexCb.checked = q.regexp;
   caseCb.checked = q.caseSensitive;
 
+  showCount(view.state);
+
   return {
     dom,
     top: true,
     mount() {
       searchInput.focus();
       searchInput.select();
+    },
+    update(u) {
+      if (u.docChanged || !getSearchQuery(u.state).eq(lastQuery)) scheduleRecount();
+      else if (u.selectionSet) showCount(u.state);
+    },
+    destroy() {
+      clearTimeout(recountTimer);
     },
   };
 }

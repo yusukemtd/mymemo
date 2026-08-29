@@ -296,6 +296,13 @@ body,
   gap: 8px;
 }
 
+.mm-search-count {
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  min-width: 4em;
+}
+
 .mm-search input[type="text"],
 .mm-search input:not([type]) {
   width: 260px;
