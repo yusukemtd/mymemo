@@ -363,11 +363,23 @@ pub fn run() {
                             .accelerator("CmdOrCtrl+Alt+0")
                             .build(app)?,
                     );
-                    sub = sub.separator().item(
-                        &MenuItemBuilder::with_id("md:checkbox", "チェックボックスの切替")
-                            .accelerator("CmdOrCtrl+Shift+Enter")
-                            .build(app)?,
-                    );
+                    sub = sub.separator();
+                    for (id, label, key) in [
+                        ("md:bullet", "箇条書き", "CmdOrCtrl+Shift+8"),
+                        ("md:ordered", "番号付きリスト", "CmdOrCtrl+Shift+7"),
+                        ("md:quote", "引用", "CmdOrCtrl+Shift+."),
+                        (
+                            "md:checkbox",
+                            "チェックボックスの切替",
+                            "CmdOrCtrl+Shift+Enter",
+                        ),
+                    ] {
+                        sub = sub.item(
+                            &MenuItemBuilder::with_id(id, label)
+                                .accelerator(key)
+                                .build(app)?,
+                        );
+                    }
                     sub.build()?
                 })
                 .build()?;

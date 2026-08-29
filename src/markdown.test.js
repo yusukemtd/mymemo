@@ -296,3 +296,54 @@ describe("リスト行の Tab / Shift+Tab(ネスト / 解除)", () => {
     view.destroy();
   });
 });
+
+describe("箇条書き / 番号付き / 引用の切替(toggleLineMarker)", () => {
+  const mk = async (doc, sel) => {
+    const { toggleLineMarker } = await import("./markdown.js");
+    const view = new EditorView({ state: createEditorState(doc, () => {}), parent: document.body });
+    if (sel) view.dispatch({ selection: sel });
+    return { view, t: (kind) => toggleLineMarker(view, kind), doc: () => view.state.doc.toString() };
+  };
+
+  it("箇条書き: 付ける → 全行に付いていれば外す。空行は飛ばし、番号付きは置き換える", async () => {
+    const { view, t, doc } = await mk("a\n\n1. b\n  c", { anchor: 0, head: 11 });
+    t("bullet");
+    expect(doc()).toBe("- a\n\n- b\n  - c");
+    t("bullet");
+    expect(doc()).toBe("a\n\nb\n  c");
+    view.destroy();
+  });
+
+  it("一部の行だけマーク付きなら足りない行に付ける(外さない)", async () => {
+    const { view, t, doc } = await mk("- a\nb", { anchor: 0, head: 5 });
+    t("bullet");
+    expect(doc()).toBe("- a\n- b");
+    view.destroy();
+  });
+
+  it("番号付き: 1 から連番にし、既存の番号も揃える。全行番号付きなら外す", async () => {
+    const { view, t, doc } = await mk("a\n5. b\n- c", { anchor: 0, head: 10 });
+    t("ordered");
+    expect(doc()).toBe("1. a\n2. b\n3. c");
+    t("ordered");
+    expect(doc()).toBe("a\nb\nc");
+    view.destroy();
+  });
+
+  it("引用: リストマークの前に付き、外すときは > だけ外す", async () => {
+    const { view, t, doc } = await mk("- a\ntext", { anchor: 0, head: 8 });
+    t("quote");
+    expect(doc()).toBe("> - a\n> text");
+    t("quote");
+    expect(doc()).toBe("- a\ntext");
+    view.destroy();
+  });
+
+  it("1 行(空行)でも付けてカーソルをマークの後ろに置く", async () => {
+    const { view, t, doc } = await mk("", { anchor: 0 });
+    t("ordered");
+    expect(doc()).toBe("1. ");
+    expect(view.state.selection.main.head).toBe(3);
+    view.destroy();
+  });
+});

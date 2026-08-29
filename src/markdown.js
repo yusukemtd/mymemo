@@ -156,6 +156,50 @@ export function toggleCheckbox(view) {
   return true;
 }
 
+const MARKER_RES = {
+  bullet: /^(\s*)[-*+](?:\s+|$)/,
+  ordered: /^(\s*)\d+[.)](?:\s+|$)/,
+  quote: /^(\s*)>\s?/,
+};
+
+// 箇条書き(bullet)/ 番号付きリスト(ordered)/ 引用(quote)の切替。
+// 対象行がすべてそのマーク付きなら外し、そうでなければ足りない行に付ける。
+// リストは他種のリストマークを置き換え、番号付きは対象行を 1 から連番にする。引用はリストマークの前に付く
+export function toggleLineMarker(view, kind) {
+  const { state } = view;
+  const re = MARKER_RES[kind];
+  const lines = targetLines(state);
+  if (!lines.length) return false;
+  const allHave = lines.every((l) => re.test(l.text));
+  const changes = [];
+  let n = 0;
+  for (const line of lines) {
+    const m = re.exec(line.text);
+    if (allHave) {
+      changes.push({ from: line.from + m[1].length, to: line.from + m[0].length });
+      continue;
+    }
+    const marker = kind === "bullet" ? "- " : kind === "ordered" ? `${++n}. ` : "> ";
+    if (m) {
+      // 既に付いている行: 番号付きだけは連番に揃える
+      if (kind === "ordered" && m[0] !== m[1] + marker) {
+        changes.push({ from: line.from + m[1].length, to: line.from + m[0].length, insert: marker });
+      }
+      continue;
+    }
+    const from = line.from + /^\s*/.exec(line.text)[0].length;
+    let to = from;
+    if (kind !== "quote") {
+      const other = LIST_RE.exec(line.text);
+      if (other) to = line.from + other[0].length;
+    }
+    changes.push({ from, to, insert: marker });
+  }
+  if (!changes.length) return false;
+  dispatchLineChanges(view, changes);
+  return true;
+}
+
 // リスト行で Tab / Shift+Tab: 項目をネスト / 解除する(インデント設定の単位で字下げ)。
 // 選択範囲があるとき・カーソル行がリスト項目でないときは false を返して既定の Tab に任せる
 function allCursorsOnListLines(state) {
@@ -190,4 +234,7 @@ export const MARKDOWN_COMMANDS = {
   link: insertLink,
   heading: (view, level) => setHeading(view, Number(level)),
   checkbox: toggleCheckbox,
+  bullet: (view) => toggleLineMarker(view, "bullet"),
+  ordered: (view) => toggleLineMarker(view, "ordered"),
+  quote: (view) => toggleLineMarker(view, "quote"),
 };
