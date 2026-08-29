@@ -34,7 +34,22 @@ Mac 向けの軽量テキストエディタ(Tauri 2 + CodeMirror 6)。
 | Cmd+F | 検索・置換パネル |
 | Cmd+Shift+F | 複数ファイル grep |
 | Tab / Shift+Tab | タブ文字を入力(選択範囲があればインデント)/ インデント解除 |
+| Cmd+[ / Cmd+] | インデント解除 / インデント |
+| Cmd+Z / Cmd+Shift+Z | 取り消す / やり直す |
+| Cmd+G / Cmd+Shift+G | 次 / 前の一致へ(検索パネルを閉じていても使える) |
+| Cmd+Option+G | 行へ移動 |
+| Option+↑ / ↓ | 行を上 / 下へ移動 |
+| Shift+Option+↑ / ↓ | 行を上 / 下に複製 |
+| Cmd+Shift+K | 行を削除 |
+| Ctrl+L | 行を選択 |
+| Cmd+Enter | 下に空行を挿入 |
+| Cmd+/ | コメントの切替(言語が判定できたファイルのみ) |
+| Cmd+Shift+\\ | 対応する括弧へ移動 |
+| Cmd+D / Cmd+Shift+L | 次の同じ語を選択に追加 / 同じ語をすべて選択(複数カーソル) |
+| Cmd+Option+↑ / ↓ | 上 / 下の行にカーソルを追加 |
+| Cmd+クリック | カーソルを追加 |
 | Option+ドラッグ | 矩形選択 |
+| Esc | 検索パネルを閉じる / 複数選択を解除 |
 
 ## 開発
 
