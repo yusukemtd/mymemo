@@ -53,6 +53,23 @@ fn set_toggle(items: tauri::State<ToggleMenuItems>, id: String, on: bool) -> Res
     item.set_checked(on).map_err(|e| e.to_string())
 }
 
+// プレビュー内のリンクを既定のブラウザで開く。開いてよいのは http / https / mailto だけ
+fn is_openable_url(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://") || url.starts_with("mailto:")
+}
+
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !is_openable_url(&url) {
+        return Err(format!("開けない URL です: {url}"));
+    }
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("ブラウザを開けませんでした: {e}"))
+}
+
 // 「編集 > インデント」の CheckMenuItem ハンドル(タブ幅 2 / 4 / 8 とソフトタブ。チェック状態の同期用)
 struct IndentMenuItems {
     sizes: Vec<(u32, CheckMenuItem<tauri::Wry>)>,
@@ -376,6 +393,13 @@ pub fn run() {
             let wrap_item = toggle_item("toggle_wrap", "行を折り返す", false)?;
             let fold_gutter_item =
                 toggle_item("toggle_fold_gutter", "折りたたみガターを表示", true)?;
+            // Markdown プレビュー(既定は非表示)。アクセラレータ付きなので toggle_item を使わず直接作る
+            let preview_item =
+                CheckMenuItemBuilder::with_id("toggle_preview", "Markdown プレビュー")
+                    .checked(false)
+                    .accelerator("CmdOrCtrl+Shift+P")
+                    .build(app)?;
+            toggles.insert("toggle_preview".to_string(), preview_item.clone());
             // 折りたたみのキーは CodeMirror の foldKeymap と同じ。言語が判定できたファイルでだけ効く
             let fold_menu = SubmenuBuilder::new(app, "折りたたみ")
                 .item(
@@ -407,6 +431,8 @@ pub fn run() {
                 .item(&whitespace_item)
                 .item(&wrap_item)
                 .item(&fold_menu)
+                .separator()
+                .item(&preview_item)
                 .separator()
                 .item(
                     &MenuItemBuilder::with_id("zoom_in", "拡大")
@@ -461,6 +487,7 @@ pub fn run() {
             set_recent_files,
             set_indent,
             popup_status_menu,
+            open_url,
             open_files::take_pending_open_files,
             grep::grep_search,
             grep::grep_replace,
@@ -483,6 +510,18 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::display_path;
+
+    #[test]
+    fn open_url_は_http_https_mailto_だけ許す() {
+        use super::is_openable_url;
+        assert!(is_openable_url("https://example.com/a?b=c"));
+        assert!(is_openable_url("http://localhost:1420/"));
+        assert!(is_openable_url("mailto:a@b.c"));
+        assert!(!is_openable_url("file:///etc/passwd"));
+        assert!(!is_openable_url("javascript:alert(1)"));
+        assert!(!is_openable_url("/usr/bin/env"));
+        assert!(!is_openable_url("-R"));
+    }
 
     #[test]
     fn display_path_はホームを_チルダに置き換える() {

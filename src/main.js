@@ -17,8 +17,10 @@ import {
   foldGutter,
   closeBrackets,
   wordCompletion,
+  markdownPreview,
   TOGGLES,
 } from "./toggles.js";
+import { initPreview, schedulePreviewUpdate } from "./preview.js";
 import { foldCode, unfoldCode, foldAll, unfoldAll } from "@codemirror/language";
 import { initFontSize, zoomIn, zoomOut, resetFontSize } from "./fontsize.js";
 import {
@@ -58,6 +60,12 @@ const container = document.getElementById("editor-container");
 const view = createView(container, createEditorState("", () => {}));
 // 起動時の無題タブはセッション復元の結果を見てから作る。最後のタブを閉じたときもセッションを保存してから終了する
 Tabs.initTabs(view, { initialTab: false, onLastTabClosed: quitApp });
+
+// --- Markdown プレビュー(表示 > Markdown プレビュー)。本文・タブの変化に追従する ---
+initPreview(view, { activeTab: Tabs.getActiveTab });
+markdownPreview.init();
+window.addEventListener("active-tab-changed", schedulePreviewUpdate);
+window.addEventListener("cursor-moved", schedulePreviewUpdate);
 
 // --- セッション復元(前回開いていたタブと無題タブの下書き)。復元するものが無ければ無題タブを 1 つ作る ---
 const restoring = restoreSession((path, encoding) =>

@@ -7,14 +7,22 @@ import {
   setCloseBrackets,
   setWordCompletion,
 } from "./editor.js";
+import { setPreviewVisible } from "./preview.js";
 
 // 表示・編集の ON/OFF 設定の共通部品。1 つの設定 = editor.js の setter(新規タブ用の既定値を更新し、
-// 既存 state 向けの reconfigure エフェクトを返す)+ ネイティブメニューのチェック同期(Rust 側の set_toggle。
-// id はメニュー項目の ID と同じ)+ localStorage 永続化
+// 既存 state 向けの reconfigure エフェクトを返す)または onChange(CodeMirror 拡張以外の反映)
+// + ネイティブメニューのチェック同期(Rust 側の set_toggle。id はメニュー項目の ID と同じ)+ localStorage 永続化
 
-export function createToggle({ id, storageKey, setter, defaultValue }) {
+export function createToggle({ id, storageKey, setter = null, onChange = null, defaultValue }) {
   let value = defaultValue;
   const sync = () => invoke("set_toggle", { id, on: value }).catch(console.error);
+  const reflect = (initial) => {
+    if (setter) {
+      const effects = setter(value);
+      if (!initial) applyToAllTabs(effects); // 起動時はタブ未生成なので reconfigure は不要
+    }
+    onChange?.(value);
+  };
   return {
     id,
     get: () => value,
@@ -23,7 +31,7 @@ export function createToggle({ id, storageKey, setter, defaultValue }) {
       try {
         localStorage.setItem(storageKey, value ? "1" : "0");
       } catch {}
-      applyToAllTabs(setter(value));
+      reflect(false);
       sync();
     },
     toggle() {
@@ -36,7 +44,7 @@ export function createToggle({ id, storageKey, setter, defaultValue }) {
         saved = localStorage.getItem(storageKey);
       } catch {}
       value = saved == null ? defaultValue : saved === "1";
-      setter(value); // タブ未生成なので reconfigure は不要
+      reflect(true);
       sync();
     },
   };
@@ -82,7 +90,15 @@ export const wordCompletion = createToggle({
   defaultValue: false,
 });
 
+// Markdown プレビュー(既定は非表示)。initPreview の後に init すること
+export const markdownPreview = createToggle({
+  id: "toggle_preview",
+  storageKey: "mymemo.preview",
+  onChange: setPreviewVisible,
+  defaultValue: false,
+});
+
 // メニュー項目 ID → 設定
 export const TOGGLES = Object.fromEntries(
-  [showWhitespace, lineWrap, foldGutter, closeBrackets, wordCompletion].map((t) => [t.id, t])
+  [showWhitespace, lineWrap, foldGutter, closeBrackets, wordCompletion, markdownPreview].map((t) => [t.id, t])
 );

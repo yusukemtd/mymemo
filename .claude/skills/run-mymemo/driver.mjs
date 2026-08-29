@@ -205,6 +205,7 @@ function mockInit() {
         case "set_recent_files":
         case "set_indent":
         case "popup_status_menu":
+        case "open_url":
           return null;
         case "take_pending_open_files":
           // 起動と同時に Finder から渡されたファイル(モックでは常に無し)。
