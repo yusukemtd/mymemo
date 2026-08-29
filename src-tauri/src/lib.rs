@@ -363,6 +363,11 @@ pub fn run() {
                             .accelerator("CmdOrCtrl+Alt+0")
                             .build(app)?,
                     );
+                    sub = sub.separator().item(
+                        &MenuItemBuilder::with_id("md:checkbox", "チェックボックスの切替")
+                            .accelerator("CmdOrCtrl+Shift+Enter")
+                            .build(app)?,
+                    );
                     sub.build()?
                 })
                 .build()?;

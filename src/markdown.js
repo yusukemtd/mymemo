@@ -127,6 +127,34 @@ export function setHeading(view, level) {
   return true;
 }
 
+const LIST_RE = /^(\s*)([-*+]|\d+[.)])(?:\s+|$)/;
+const CHECKBOX_RE = /^(\s*)([-*+]|\d+[.)])\s+\[( |x|X)\](?:\s+|$)/;
+
+// チェックボックスを切り替える: [ ] ↔ [x]。リスト行にチェックボックスが無ければ [ ] を足し、
+// リスト行でなければ "- [ ] " を付ける(複数行は各行を個別に反転)
+export function toggleCheckbox(view) {
+  const changes = [];
+  for (const line of targetLines(view.state)) {
+    const cb = CHECKBOX_RE.exec(line.text);
+    if (cb) {
+      const pos = line.from + cb[0].lastIndexOf("[") + 1;
+      changes.push({ from: pos, to: pos + 1, insert: cb[3] === " " ? "x" : " " });
+      continue;
+    }
+    const li = LIST_RE.exec(line.text);
+    if (li) {
+      const hasSpace = /\s$/.test(li[0]);
+      changes.push({ from: line.from + li[0].length, insert: (hasSpace ? "" : " ") + "[ ] " });
+    } else {
+      const indent = /^\s*/.exec(line.text)[0].length;
+      changes.push({ from: line.from + indent, insert: "- [ ] " });
+    }
+  }
+  if (!changes.length) return false;
+  dispatchLineChanges(view, changes);
+  return true;
+}
+
 // 行頭への挿入でカーソルがマークの前に取り残されないよう、選択は挿入の後ろ側へ写像する
 function dispatchLineChanges(view, changes) {
   const set = view.state.changes(changes);
@@ -146,4 +174,5 @@ export const MARKDOWN_COMMANDS = {
   code: (view) => toggleInline(view, "`"),
   link: insertLink,
   heading: (view, level) => setHeading(view, Number(level)),
+  checkbox: toggleCheckbox,
 };

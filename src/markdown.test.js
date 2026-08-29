@@ -198,3 +198,38 @@ describe("見出しレベル(setHeading)", () => {
     view.destroy();
   });
 });
+
+describe("チェックボックスの切替(toggleCheckbox)", () => {
+  const mk = async (doc, sel) => {
+    const { toggleCheckbox } = await import("./markdown.js");
+    const view = new EditorView({ state: createEditorState(doc, () => {}), parent: document.body });
+    if (sel) view.dispatch({ selection: sel });
+    return { view, toggleCheckbox };
+  };
+
+  it("[ ] と [x] を反転する(X も対象)", async () => {
+    const { view, toggleCheckbox } = await mk("- [ ] a\n* [x] b\n1. [X] c\n  - [ ] d", { anchor: 0, head: 30 });
+    expect(toggleCheckbox(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe("- [x] a\n* [ ] b\n1. [ ] c\n  - [x] d");
+    view.destroy();
+  });
+
+  it("チェックボックスの無いリスト行には [ ] を足し、リスト行でなければ - [ ] を付ける", async () => {
+    const { view, toggleCheckbox } = await mk("- a\n2) b\nplain\n  indented", { anchor: 0, head: 25 });
+    toggleCheckbox(view);
+    expect(view.state.doc.toString()).toBe("- [ ] a\n2) [ ] b\n- [ ] plain\n  - [ ] indented");
+    view.destroy();
+  });
+
+  it("空行 1 行なら - [ ] を付けてカーソルをその後ろに置く。マーカーだけの行にも付く", async () => {
+    const { view, toggleCheckbox } = await mk("", { anchor: 0 });
+    toggleCheckbox(view);
+    expect(view.state.doc.toString()).toBe("- [ ] ");
+    expect(view.state.selection.main.head).toBe(6);
+    view.destroy();
+    const m = await mk("-", { anchor: 1 });
+    m.toggleCheckbox(m.view);
+    expect(m.view.state.doc.toString()).toBe("- [ ] ");
+    m.view.destroy();
+  });
+});
