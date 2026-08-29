@@ -633,6 +633,49 @@ export function setShowWhitespace(show) {
   return () => whitespaceCompartment.reconfigure(show ? whitespaceExtension : []);
 }
 
+// --- 文字数(ステータスバー表示用) ---
+// 改行を除いた Unicode コードポイント数。CodeMirror の doc.length は UTF-16 単位なので
+// サロゲートペア(絵文字など)を 1 文字として数え直す
+export function countChars(text) {
+  const pairs = text.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g)?.length ?? 0;
+  const breaks = text.match(/[\r\n]/g)?.length ?? 0;
+  return text.length - pairs - breaks;
+}
+
+// 全文の文字数。毎回数え直すと巨大ファイルで入力のたびに全文走査になるため、
+// 変更分(削除された範囲と挿入されたテキスト)だけ差し引きして保持する
+export const charCountField = StateField.define({
+  create: (state) => countChars(state.doc.toString()),
+  update(count, tr) {
+    if (!tr.docChanged) return count;
+    tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+      if (toA > fromA) count -= countChars(tr.startState.doc.sliceString(fromA, toA));
+      if (inserted.length) count += countChars(inserted.toString());
+    });
+    return count;
+  },
+});
+
+export function charCount(state) {
+  return state.field(charCountField);
+}
+
+// 選択範囲の文字数(複数選択は合計。選択が無ければ 0)
+export function selectionCharCount(state) {
+  let n = 0;
+  for (const r of state.selection.ranges) {
+    if (!r.empty) n += countChars(state.doc.sliceString(r.from, r.to));
+  }
+  return n;
+}
+
+// ステータスバー用ラベル: "1,234 文字" / 選択中は "選択 12 / 1,234 文字"
+export function describeCharCount(state) {
+  const total = charCount(state).toLocaleString("ja-JP");
+  const sel = selectionCharCount(state);
+  return sel > 0 ? `選択 ${sel.toLocaleString("ja-JP")} / ${total} 文字` : `${total} 文字`;
+}
+
 // --- 行の折り返し(表示 > 行を折り返す) ---
 const wrapCompartment = new Compartment();
 let lineWrap = false;
@@ -673,6 +716,7 @@ export function baseExtensions(onChange) {
     themeCompartment.of(cmThemes[editorDark ? "dark" : "light"]),
     japanesePhrases,
     jumpHighlightField,
+    charCountField,
     eolField,
     eolHistory,
     whitespaceCompartment.of(showWhitespace ? whitespaceExtension : []),

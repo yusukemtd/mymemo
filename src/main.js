@@ -6,6 +6,7 @@ import {
   setJumpHighlight,
   docWithLineEndings,
   describeLineEndings,
+  describeCharCount,
   lineEndingSummary,
 } from "./editor.js";
 import * as Tabs from "./tabs.js";
@@ -114,6 +115,7 @@ async function saveFile(as = false) {
 
 // --- ステータスバー ---
 const statusPos = document.getElementById("status-pos");
+const statusCount = document.getElementById("status-count");
 const statusEnc = document.getElementById("status-encoding");
 const statusEol = document.getElementById("status-eol");
 
@@ -124,6 +126,7 @@ function updateStatusBar() {
   const head = view.state.selection.main.head;
   const line = view.state.doc.lineAt(head);
   statusPos.textContent = `${line.number} 行, ${head - line.from + 1} 列`;
+  statusCount.textContent = describeCharCount(view.state);
 }
 
 window.addEventListener("active-tab-changed", updateStatusBar);
