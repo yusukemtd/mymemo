@@ -3,11 +3,11 @@ mod file_io;
 mod grep;
 mod open_files;
 
+use std::collections::HashMap;
 use tauri::menu::{
     AboutMetadataBuilder, CheckMenuItem, CheckMenuItemBuilder, ContextMenu, MenuBuilder,
     MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder,
 };
-use std::collections::HashMap;
 use tauri::{Emitter, Manager};
 
 // 最後のタブを閉じたときにフロントエンドから呼ばれる
@@ -46,7 +46,10 @@ struct ToggleMenuItems(HashMap<String, CheckMenuItem<tauri::Wry>>);
 // 設定の確定時にフロントエンド(toggles.js)から呼ばれる(起動時の保存値復元も含む)
 #[tauri::command]
 fn set_toggle(items: tauri::State<ToggleMenuItems>, id: String, on: bool) -> Result<(), String> {
-    let item = items.0.get(&id).ok_or_else(|| format!("未知の設定: {id}"))?;
+    let item = items
+        .0
+        .get(&id)
+        .ok_or_else(|| format!("未知の設定: {id}"))?;
     item.set_checked(on).map_err(|e| e.to_string())
 }
 
@@ -64,7 +67,8 @@ fn set_indent(
     soft_tabs: bool,
 ) -> Result<(), String> {
     for (size, item) in &items.sizes {
-        item.set_checked(*size == tab_size).map_err(|e| e.to_string())?;
+        item.set_checked(*size == tab_size)
+            .map_err(|e| e.to_string())?;
     }
     items.soft.set_checked(soft_tabs).map_err(|e| e.to_string())
 }
@@ -153,9 +157,7 @@ pub fn run() {
         // setup より前に届くので、setup 内の manage ではなくここで登録する(open_files.rs 参照)
         .manage(open_files::OpenFilesState::default())
         .setup(|app| {
-            let about = AboutMetadataBuilder::new()
-                .name(Some("mymemo"))
-                .build();
+            let about = AboutMetadataBuilder::new().name(Some("mymemo")).build();
 
             let app_menu = SubmenuBuilder::new(app, "mymemo")
                 .item(&PredefinedMenuItem::about(
@@ -202,8 +204,7 @@ pub fn run() {
                     let mut enc_menu = SubmenuBuilder::new(app, "文字コードを指定して開く");
                     for enc in ["UTF-8", "CP932", "EUC-JP", "UTF-16LE", "UTF-16BE"] {
                         enc_menu = enc_menu.item(
-                            &MenuItemBuilder::with_id(format!("open_enc:{enc}"), enc)
-                                .build(app)?,
+                            &MenuItemBuilder::with_id(format!("open_enc:{enc}"), enc).build(app)?,
                         );
                     }
                     enc_menu.build()?
@@ -240,21 +241,26 @@ pub fn run() {
             };
             let close_brackets_item =
                 toggle_item("toggle_close_brackets", "括弧・引用符を自動で閉じる", false)?;
-            let word_completion_item = toggle_item("toggle_word_completion", "単語を補完する", false)?;
+            let word_completion_item =
+                toggle_item("toggle_word_completion", "単語を補完する", false)?;
 
             // 既定はタブ幅 4・ハードタブ。アクティブタブに合わせてフロントエンドの set_indent で同期される
             let mut size_items = Vec::new();
             let mut indent_sub = SubmenuBuilder::new(app, "インデント");
             for size in [2u32, 4, 8] {
-                let item = CheckMenuItemBuilder::with_id(format!("tabsize:{size}"), format!("タブ幅 {size}"))
-                    .checked(size == 4)
-                    .build(app)?;
+                let item = CheckMenuItemBuilder::with_id(
+                    format!("tabsize:{size}"),
+                    format!("タブ幅 {size}"),
+                )
+                .checked(size == 4)
+                .build(app)?;
                 indent_sub = indent_sub.item(&item);
                 size_items.push((size, item));
             }
-            let soft_item = CheckMenuItemBuilder::with_id("soft_tabs", "スペースでインデント(ソフトタブ)")
-                .checked(false)
-                .build(app)?;
+            let soft_item =
+                CheckMenuItemBuilder::with_id("soft_tabs", "スペースでインデント(ソフトタブ)")
+                    .checked(false)
+                    .build(app)?;
             let indent_menu = indent_sub.separator().item(&soft_item).build()?;
             app.manage(IndentMenuItems {
                 sizes: size_items,
@@ -350,7 +356,8 @@ pub fn run() {
             }
             let whitespace_item = toggle_item("toggle_whitespace", "空白文字・改行を表示", true)?;
             let wrap_item = toggle_item("toggle_wrap", "行を折り返す", false)?;
-            let fold_gutter_item = toggle_item("toggle_fold_gutter", "折りたたみガターを表示", true)?;
+            let fold_gutter_item =
+                toggle_item("toggle_fold_gutter", "折りたたみガターを表示", true)?;
             // 折りたたみのキーは CodeMirror の foldKeymap と同じ。言語が判定できたファイルでだけ効く
             let fold_menu = SubmenuBuilder::new(app, "折りたたみ")
                 .item(
@@ -404,7 +411,10 @@ pub fn run() {
 
             let window_menu = SubmenuBuilder::new(app, "ウインドウ")
                 .item(&PredefinedMenuItem::minimize(app, Some("しまう"))?)
-                .item(&PredefinedMenuItem::fullscreen(app, Some("フルスクリーン"))?)
+                .item(&PredefinedMenuItem::fullscreen(
+                    app,
+                    Some("フルスクリーン"),
+                )?)
                 .build()?;
 
             let menu = MenuBuilder::new(app)
@@ -459,7 +469,10 @@ mod tests {
     #[test]
     fn display_path_はホームを_チルダに置き換える() {
         let home = std::env::var("HOME").unwrap();
-        assert_eq!(display_path(&format!("{home}/notes/a.txt")), "~/notes/a.txt");
+        assert_eq!(
+            display_path(&format!("{home}/notes/a.txt")),
+            "~/notes/a.txt"
+        );
         assert_eq!(display_path("/tmp/a.txt"), "/tmp/a.txt");
     }
 }

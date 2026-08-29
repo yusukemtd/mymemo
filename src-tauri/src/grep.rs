@@ -69,7 +69,11 @@ pub async fn grep_replace(
     .map_err(|e| format!("置換スレッドエラー: {e}"))?
 }
 
-fn build_matcher(pattern: &str, is_regex: bool, case_sensitive: bool) -> Result<RegexMatcher, String> {
+fn build_matcher(
+    pattern: &str,
+    is_regex: bool,
+    case_sensitive: bool,
+) -> Result<RegexMatcher, String> {
     let pat = if is_regex {
         pattern.to_string()
     } else {
@@ -87,16 +91,20 @@ fn build_walk(dir: &str, globs: &[String]) -> Result<ignore::Walk, String> {
     if !globs.is_empty() {
         let mut ov = OverrideBuilder::new(dir);
         for g in globs {
-            ov.add(g).map_err(|e| format!("ファイル名パターンエラー: {e}"))?;
+            ov.add(g)
+                .map_err(|e| format!("ファイル名パターンエラー: {e}"))?;
         }
-        builder.overrides(ov.build().map_err(|e| format!("ファイル名パターンエラー: {e}"))?);
+        builder.overrides(
+            ov.build()
+                .map_err(|e| format!("ファイル名パターンエラー: {e}"))?,
+        );
     }
     Ok(builder.build())
 }
 
 // 検索対象として読むべきファイルなら bytes を返す(巨大・バイナリ・読めないものは None)
 fn read_candidate(entry: &ignore::DirEntry) -> Option<Vec<u8>> {
-    if !entry.file_type().map_or(false, |t| t.is_file()) {
+    if !entry.file_type().is_some_and(|t| t.is_file()) {
         return None;
     }
     // エンコーディング自動判定のため全読みが必要なので、巨大ファイルは読む前に除外する
@@ -366,7 +374,11 @@ mod tests {
         let r = search(&dir, "日本語", false, true);
         assert_eq!(r.hits.len(), 3);
         // 行番号はデコード後もファイルと一致する
-        let sjis_hit = r.hits.iter().find(|h| h.path.ends_with("sjis.txt")).unwrap();
+        let sjis_hit = r
+            .hits
+            .iter()
+            .find(|h| h.path.ends_with("sjis.txt"))
+            .unwrap();
         assert_eq!(sjis_hit.line_number, 2);
         assert_eq!(sjis_hit.line_text, "これは日本語の行\n");
     }
@@ -426,26 +438,47 @@ mod tests {
 
     #[test]
     fn globs_filter_files_and_exclude() {
-        let dir = setup(&[("a.md", b"needle\n"), ("b.txt", b"needle\n"), ("skip.md", b"needle\n")]);
+        let dir = setup(&[
+            ("a.md", b"needle\n"),
+            ("b.txt", b"needle\n"),
+            ("skip.md", b"needle\n"),
+        ]);
         fs::create_dir(dir.path().join("sub")).unwrap();
         fs::write(dir.path().join("sub/c.md"), b"needle\n").unwrap();
         let r = search_globs(&dir, "needle", false, true, &["*.md"]);
-        let mut names: Vec<_> = r.hits.iter().map(|h| h.path.rsplit('/').next().unwrap().to_string()).collect();
+        let mut names: Vec<_> = r
+            .hits
+            .iter()
+            .map(|h| h.path.rsplit('/').next().unwrap().to_string())
+            .collect();
         names.sort();
         assert_eq!(names, ["a.md", "c.md", "skip.md"]); // サブフォルダも対象
         let r = search_globs(&dir, "needle", false, true, &["*.md", "!skip.md"]);
         assert_eq!(r.hits.len(), 2);
         assert!(r.hits.iter().all(|h| !h.path.ends_with("skip.md")));
-        let err = grep_impl(dir.path().to_string_lossy().into_owned(), "x".into(), false, true, vec!["[".into()]);
+        let err = grep_impl(
+            dir.path().to_string_lossy().into_owned(),
+            "x".into(),
+            false,
+            true,
+            vec!["[".into()],
+        );
         assert!(err.is_err());
     }
 
     #[test]
     fn replace_literal_keeps_line_endings_and_counts() {
-        let dir = setup(&[("a.txt", b"foo bar\r\nfoo\r\n"), ("b.txt", b"none\n"), ("c.md", b"foo\n")]);
+        let dir = setup(&[
+            ("a.txt", b"foo bar\r\nfoo\r\n"),
+            ("b.txt", b"none\n"),
+            ("c.md", b"foo\n"),
+        ]);
         let r = replace(&dir, "foo", false, &["*.txt"], "baz");
         assert_eq!((r.files, r.replacements), (1, 2));
-        assert_eq!(fs::read(dir.path().join("a.txt")).unwrap(), b"baz bar\r\nbaz\r\n");
+        assert_eq!(
+            fs::read(dir.path().join("a.txt")).unwrap(),
+            b"baz bar\r\nbaz\r\n"
+        );
         assert_eq!(fs::read(dir.path().join("b.txt")).unwrap(), b"none\n");
         assert_eq!(fs::read(dir.path().join("c.md")).unwrap(), b"foo\n"); // glob 外は触らない
     }
@@ -470,10 +503,17 @@ mod tests {
         for u in "old\n".encode_utf16() {
             u16.extend_from_slice(&u.to_le_bytes());
         }
-        let dir = setup(&[("sjis.txt", &sjis[..]), ("bom.txt", &bom[..]), ("u16.txt", &u16[..])]);
+        let dir = setup(&[
+            ("sjis.txt", &sjis[..]),
+            ("bom.txt", &bom[..]),
+            ("u16.txt", &u16[..]),
+        ]);
         assert_eq!(replace(&dir, "古い", false, &[], "新しい").replacements, 1);
         let (expect, _, _) = encoding_rs::SHIFT_JIS.encode("新しい日本語\n");
-        assert_eq!(fs::read(dir.path().join("sjis.txt")).unwrap(), expect.as_ref());
+        assert_eq!(
+            fs::read(dir.path().join("sjis.txt")).unwrap(),
+            expect.as_ref()
+        );
         assert_eq!(replace(&dir, "old", false, &[], "new").files, 2);
         let mut expect_bom = UTF8_BOM.to_vec();
         expect_bom.extend_from_slice("new\n".as_bytes());
@@ -495,8 +535,18 @@ mod tests {
         // CP932 で表現できない文字への置換はエラーにしてファイルを壊さない(ASCII だけだと UTF-8 と判定されるので日本語を含める)
         let (sjis, _, _) = encoding_rs::SHIFT_JIS.encode("old 日本語\n");
         let dir = setup(&[("sjis.txt", &sjis[..])]);
-        let err = replace_impl(dir.path().to_string_lossy().into_owned(), "old".into(), false, true, vec![], "🍣".into());
+        let err = replace_impl(
+            dir.path().to_string_lossy().into_owned(),
+            "old".into(),
+            false,
+            true,
+            vec![],
+            "🍣".into(),
+        );
         assert!(err.is_err());
-        assert_eq!(fs::read(dir.path().join("sjis.txt")).unwrap(), sjis.as_ref());
+        assert_eq!(
+            fs::read(dir.path().join("sjis.txt")).unwrap(),
+            sjis.as_ref()
+        );
     }
 }

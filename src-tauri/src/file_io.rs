@@ -32,9 +32,8 @@ pub fn file_mtime(path: String) -> Option<u64> {
 fn encoding_for(name: &str) -> Result<&'static Encoding, String> {
     match name {
         "CP932" => Ok(SHIFT_JIS),
-        other => {
-            Encoding::for_label(other.as_bytes()).ok_or_else(|| format!("未対応の文字コード: {other}"))
-        }
+        other => Encoding::for_label(other.as_bytes())
+            .ok_or_else(|| format!("未対応の文字コード: {other}")),
     }
 }
 
