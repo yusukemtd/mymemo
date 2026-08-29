@@ -47,7 +47,7 @@ import {
   foldKeymap,
 } from "@codemirror/language";
 import { languages } from "@codemirror/language-data";
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { closeBrackets, closeBracketsKeymap, autocompletion, completeAnyWord } from "@codemirror/autocomplete";
 import { markdownKeymap } from "@codemirror/lang-markdown";
 import { getDefaultIndent } from "./indent.js";
 import { countMatches, describeMatches, replaceInSelection } from "./searchtools.js";
@@ -781,6 +781,17 @@ export function setCloseBrackets(on) {
   return () => closeBracketsCompartment.reconfigure(on ? closeBracketsExtension : []);
 }
 
+// --- 単語補完(編集 > 単語を補完する。既定は OFF) ---
+// 同じ文書内の単語を候補にする。言語の補完は使わない(override)。候補は入力に追従して出て Enter で確定
+const wordCompletionCompartment = new Compartment();
+let wordCompletion = false;
+const wordCompletionExtension = autocompletion({ override: [completeAnyWord], icons: false });
+
+export function setWordCompletion(on) {
+  wordCompletion = on;
+  return () => wordCompletionCompartment.reconfigure(on ? wordCompletionExtension : []);
+}
+
 // --- 行の折り返し(表示 > 行を折り返す) ---
 const wrapCompartment = new Compartment();
 let lineWrap = false;
@@ -813,6 +824,7 @@ export function baseExtensions(onChange, indent = getDefaultIndent()) {
     search({ top: true, createPanel: createSearchPanel }),
     indentCompartment.of(indentExtension(indent)),
     closeBracketsCompartment.of(autoCloseBrackets ? closeBracketsExtension : []), // Backspace を既定より優先させるため keymap より前
+    wordCompletionCompartment.of(wordCompletion ? wordCompletionExtension : []),
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap,

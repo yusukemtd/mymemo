@@ -240,6 +240,7 @@ pub fn run() {
             };
             let close_brackets_item =
                 toggle_item("toggle_close_brackets", "括弧・引用符を自動で閉じる", false)?;
+            let word_completion_item = toggle_item("toggle_word_completion", "単語を補完する", false)?;
 
             // 既定はタブ幅 4・ハードタブ。アクティブタブに合わせてフロントエンドの set_indent で同期される
             let mut size_items = Vec::new();
@@ -292,6 +293,7 @@ pub fn run() {
                 })
                 .item(&indent_menu)
                 .item(&close_brackets_item)
+                .item(&word_completion_item)
                 .separator()
                 .item(&{
                     // 行単位の変換。フロントの transform.js が選択範囲(無ければ全文)に適用する

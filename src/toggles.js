@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { applyToAllTabs } from "./tabs.js";
-import { setShowWhitespace, setLineWrap, setFoldGutter, setCloseBrackets } from "./editor.js";
+import {
+  setShowWhitespace,
+  setLineWrap,
+  setFoldGutter,
+  setCloseBrackets,
+  setWordCompletion,
+} from "./editor.js";
 
 // 表示・編集の ON/OFF 設定の共通部品。1 つの設定 = editor.js の setter(新規タブ用の既定値を更新し、
 // 既存 state 向けの reconfigure エフェクトを返す)+ ネイティブメニューのチェック同期(Rust 側の set_toggle。
@@ -68,7 +74,15 @@ export const closeBrackets = createToggle({
   defaultValue: false,
 });
 
+// 単語補完(既定は OFF)
+export const wordCompletion = createToggle({
+  id: "toggle_word_completion",
+  storageKey: "mymemo.wordCompletion",
+  setter: setWordCompletion,
+  defaultValue: false,
+});
+
 // メニュー項目 ID → 設定
 export const TOGGLES = Object.fromEntries(
-  [showWhitespace, lineWrap, foldGutter, closeBrackets].map((t) => [t.id, t])
+  [showWhitespace, lineWrap, foldGutter, closeBrackets, wordCompletion].map((t) => [t.id, t])
 );
