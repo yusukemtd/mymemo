@@ -200,6 +200,49 @@ export function toggleLineMarker(view, kind) {
   return true;
 }
 
+const ORDERED_ITEM_RE = /^(\s*)(\d+)([.)])(?:\s+|$)/;
+
+// 番号付きリストの番号を振り直す。選択範囲があればその範囲にかかる行、無ければ全文が対象。
+// 同じ字下げの連続する項目を 1 つのリストとみなし、最初の項目の番号から連番にする。
+// 深い字下げの行(ネストした項目・継続段落)や空行を挟んでもリストは続き、浅い行やリスト以外の行で途切れる
+export function renumberOrderedLists(view) {
+  const { state } = view;
+  const sel = state.selection.main;
+  let first = 1;
+  let last = state.doc.lines;
+  if (!sel.empty) {
+    first = state.doc.lineAt(sel.from).number;
+    const endLine = state.doc.lineAt(sel.to);
+    last = sel.to === endLine.from && endLine.number > first ? endLine.number - 1 : endLine.number;
+  }
+  const changes = [];
+  const stack = []; // 字下げごとの進行中のリスト { indent, next }
+  for (let n = first; n <= last; n++) {
+    const line = state.doc.line(n);
+    if (line.text.trim() === "") continue;
+    const indent = /^\s*/.exec(line.text)[0].length;
+    const m = ORDERED_ITEM_RE.exec(line.text);
+    // 自分より深いリストは終わる。番号付き以外の行は同じ深さのリストも終わらせる
+    while (stack.length && stack[stack.length - 1].indent > indent) stack.pop();
+    if (!m) {
+      while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
+      continue;
+    }
+    let top = stack[stack.length - 1];
+    if (!top || top.indent < indent) {
+      top = { indent, next: Number(m[2]) };
+      stack.push(top);
+    }
+    const num = String(top.next++);
+    if (num !== m[2]) {
+      changes.push({ from: line.from + m[1].length, to: line.from + m[1].length + m[2].length, insert: num });
+    }
+  }
+  if (!changes.length) return false;
+  view.dispatch({ changes, userEvent: "input" });
+  return true;
+}
+
 // リスト行で Tab / Shift+Tab: 項目をネスト / 解除する(インデント設定の単位で字下げ)。
 // 選択範囲があるとき・カーソル行がリスト項目でないときは false を返して既定の Tab に任せる
 function allCursorsOnListLines(state) {
@@ -237,4 +280,5 @@ export const MARKDOWN_COMMANDS = {
   bullet: (view) => toggleLineMarker(view, "bullet"),
   ordered: (view) => toggleLineMarker(view, "ordered"),
   quote: (view) => toggleLineMarker(view, "quote"),
+  renumber: renumberOrderedLists,
 };

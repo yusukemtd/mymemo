@@ -347,3 +347,32 @@ describe("箇条書き / 番号付き / 引用の切替(toggleLineMarker)", () =
     view.destroy();
   });
 });
+
+describe("番号の振り直し(renumberOrderedLists)", () => {
+  const mk = async (doc, sel) => {
+    const { renumberOrderedLists } = await import("./markdown.js");
+    const view = new EditorView({ state: createEditorState(doc, () => {}), parent: document.body });
+    if (sel) view.dispatch({ selection: sel });
+    return { view, run: () => renumberOrderedLists(view), doc: () => view.state.doc.toString() };
+  };
+
+  it("連続する項目を最初の番号から連番にし、ネストは別に数え、空行や継続段落を挟んでも続く", async () => {
+    const { view, run, doc } = await mk("1. a\n1. b\n   1. x\n   1. y\n\n1. c\n   text\n1) d");
+    expect(run()).toBe(true);
+    expect(doc()).toBe("1. a\n2. b\n   1. x\n   2. y\n\n3. c\n   text\n4) d");
+    expect(run()).toBe(false); // 既に揃っていれば変更なし
+    view.destroy();
+  });
+
+  it("リスト以外の行や浅い行でリストは途切れ、次のリストは自分の番号から始まる", async () => {
+    const { run, doc } = await mk("1. a\n1. b\ntext\n5. c\n5. d\n- e\n9. f\n9. g");
+    run();
+    expect(doc()).toBe("1. a\n2. b\ntext\n5. c\n6. d\n- e\n9. f\n10. g");
+  });
+
+  it("選択範囲があればその行だけを対象にする", async () => {
+    const { run, doc } = await mk("1. a\n1. b\n1. c\n1. d", { anchor: 5, head: 15 }); // b〜c の途中
+    run();
+    expect(doc()).toBe("1. a\n1. b\n2. c\n1. d");
+  });
+});

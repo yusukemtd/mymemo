@@ -380,6 +380,9 @@ pub fn run() {
                                 .build(app)?,
                         );
                     }
+                    sub = sub.item(
+                        &MenuItemBuilder::with_id("md:renumber", "番号を振り直す").build(app)?,
+                    );
                     sub.build()?
                 })
                 .build()?;
