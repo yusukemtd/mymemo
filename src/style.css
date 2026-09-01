@@ -76,6 +76,11 @@ body,
   background: var(--bg-hover-strong);
 }
 
+/* ドラッグ並べ替えの挿入先(ドロップで自分の位置にドラッグ中のタブが入る) */
+.tab.drop-target {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
 .tab.dirty .tab-name::after {
   content: " ●";
   color: var(--warning);

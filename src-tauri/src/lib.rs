@@ -94,6 +94,34 @@ fn reveal_in_finder(path: String) -> Result<(), String> {
         .map_err(|e| format!("Finder を開けませんでした: {e}"))
 }
 
+// タブの右クリックメニュー。選択はメニューバーと同じ menu イベントで届き、
+// 対象タブの index はフロントエンド側が右クリック時に覚えている(main.js)。
+// has_path が false(無題タブ)なら Finder 表示・パスコピーは無効にする
+#[tauri::command]
+fn popup_tab_menu(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    has_path: bool,
+) -> Result<(), String> {
+    let err = |e: tauri::Error| e.to_string();
+    let item = |id: &str, label: &str, enabled: bool| {
+        MenuItemBuilder::with_id(id, label)
+            .enabled(enabled)
+            .build(&app)
+            .map_err(err)
+    };
+    MenuBuilder::new(&app)
+        .item(&item("tabctx_close", "タブを閉じる", true)?)
+        .item(&item("tabctx_close_others", "他のタブを閉じる", true)?)
+        .separator()
+        .item(&item("tabctx_reveal", "Finder で表示", has_path)?)
+        .item(&item("tabctx_copy_path", "パスをコピー", has_path)?)
+        .build()
+        .map_err(err)?
+        .popup(window)
+        .map_err(err)
+}
+
 // 「編集 > インデント」の CheckMenuItem ハンドル(タブ幅 2 / 4 / 8 とソフトタブ。チェック状態の同期用)
 struct IndentMenuItems {
     sizes: Vec<(u32, CheckMenuItem<tauri::Wry>)>,
@@ -279,6 +307,11 @@ pub fn run() {
                 .item(
                     &MenuItemBuilder::with_id("close_tab", "タブを閉じる")
                         .accelerator("CmdOrCtrl+W")
+                        .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id("reopen_tab", "閉じたタブを開き直す")
+                        .accelerator("CmdOrCtrl+Shift+T")
                         .build(app)?,
                 )
                 .build()?;
@@ -564,6 +597,7 @@ pub fn run() {
             set_recent_files,
             set_indent,
             popup_status_menu,
+            popup_tab_menu,
             open_url,
             reveal_in_finder,
             open_files::take_pending_open_files,

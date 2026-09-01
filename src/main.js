@@ -157,7 +157,7 @@ async function revertFile() {
   }
 }
 
-// 「ファイル > Finder で表示」: ファイルを Finder で選択した状態で表示する
+// 「ファイル > Finder で表示」・タブ右クリック: ファイルを Finder で選択した状態で表示する
 async function revealInFinder(tab) {
   if (!tab?.path) return;
   try {
@@ -167,13 +167,23 @@ async function revealInFinder(tab) {
   }
 }
 
-// 「ファイル > パスをコピー」: ファイルのフルパスをクリップボードへ
+// 「ファイル > パスをコピー」・タブ右クリック: ファイルのフルパスをクリップボードへ
 async function copyPath(tab) {
   if (!tab?.path) return;
   try {
     await navigator.clipboard.writeText(tab.path);
   } catch (err) {
     await message(`パスをコピーできませんでした: ${err}`, { title: "mymemo", kind: "error" });
+  }
+}
+
+// タブ右クリックの「他のタブを閉じる」。未保存の確認は 1 タブずつ(断ったタブは残る)
+async function closeOtherTabs(keepIndex) {
+  const keep = Tabs.getTabs()[keepIndex];
+  if (!keep) return;
+  // 後ろから閉じると、閉じるたびに index がずれるのを気にしなくてよい
+  for (let i = Tabs.getTabs().length - 1; i >= 0; i--) {
+    if (Tabs.getTabs()[i] !== keep) await Tabs.closeTab(i, confirmDiscard);
   }
 }
 
@@ -318,9 +328,18 @@ async function jumpTo(path, lineNumber) {
 // grep の置換で書き換わったファイルは、ディスク上の変更検知と同じ経路で開いているタブへ反映する
 initGrep(jumpTo, { afterReplace: () => checkExternalChanges(externalDeps) });
 
-// タブの閉じるボタン
+// タブの閉じるボタン(中クリックも同じイベントで届く)
 document.getElementById("tabbar").addEventListener("tab-close-request", (e) => {
   Tabs.closeTab(e.detail, confirmDiscard);
+});
+
+// タブの右クリックメニュー。メニュー項目は Rust 側で作り、選択はメニューバーと同じ
+// menu イベントで届くため、対象タブの index をここで覚えておく
+let tabCtxIndex = -1;
+document.getElementById("tabbar").addEventListener("tab-context-menu", (e) => {
+  tabCtxIndex = e.detail;
+  const t = Tabs.getTabs()[tabCtxIndex];
+  invoke("popup_tab_menu", { hasPath: !!t?.path }).catch(console.error);
 });
 
 // --- 最近使ったファイル(メニュー項目は Rust 側が履歴から作り直す) ---
@@ -405,11 +424,29 @@ listen("menu", async ({ payload }) => {
         confirmDiscard
       );
       break;
+    case "reopen_tab": {
+      // 閉じたタブを新しい順に開き直す(無題タブは対象外。既に開いていれば切り替わる)
+      const path = Tabs.popClosedTabPath();
+      if (path) await openFile(path);
+      break;
+    }
     case "reveal_in_finder":
       await revealInFinder(Tabs.getActiveTab());
       break;
     case "copy_path":
       await copyPath(Tabs.getActiveTab());
+      break;
+    case "tabctx_close":
+      await Tabs.closeTab(tabCtxIndex, confirmDiscard);
+      break;
+    case "tabctx_close_others":
+      await closeOtherTabs(tabCtxIndex);
+      break;
+    case "tabctx_reveal":
+      await revealInFinder(Tabs.getTabs()[tabCtxIndex]);
+      break;
+    case "tabctx_copy_path":
+      await copyPath(Tabs.getTabs()[tabCtxIndex]);
       break;
     case "find":
       openSearchPanel(view);
@@ -495,6 +532,11 @@ window.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.key === "Tab") {
     e.preventDefault();
     Tabs.cycleTab(e.shiftKey ? -1 : 1);
+  }
+  // Cmd+1〜9 で左から n 番目のタブへ切り替える
+  if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.key >= "1" && e.key <= "9") {
+    e.preventDefault();
+    Tabs.activate(Number(e.key) - 1);
   }
 });
 

@@ -103,6 +103,56 @@ describe("tabs", () => {
     expect(tabs.getActiveTab().name).toBe("two.txt");
   });
 
+  it("moveTab はタブを並べ替え、アクティブタブを保つ", async () => {
+    const { tabs, view } = await loadTabs();
+    tabs.newTab("/a/one.txt", "ONE");
+    tabs.newTab("/a/two.txt", "TWO"); // active
+    tabs.moveTab(2, 0);
+    expect(tabs.getTabs().map((t) => t.name)).toEqual(["two.txt", "無題-1", "one.txt"]);
+    expect(tabs.getActiveTab().name).toBe("two.txt");
+    expect(view.state.doc.toString()).toBe("TWO");
+    tabs.activate(1);
+    tabs.moveTab(2, 1); // アクティブタブ自身が動かない移動でも選択を保つ
+    expect(tabs.getTabs().map((t) => t.name)).toEqual(["two.txt", "one.txt", "無題-1"]);
+    expect(tabs.getActiveTab().name).toBe("無題-1");
+  });
+
+  it("閉じたタブのパスを popClosedTabPath で新しい順に取り出せる", async () => {
+    const { tabs } = await loadTabs();
+    tabs.newTab("/a/one.txt", "1");
+    tabs.newTab("/a/two.txt", "2");
+    await tabs.closeTab(2, null);
+    await tabs.closeTab(1, null);
+    expect(tabs.popClosedTabPath()).toBe("/a/one.txt");
+    expect(tabs.popClosedTabPath()).toBe("/a/two.txt");
+    expect(tabs.popClosedTabPath()).toBe(null);
+  });
+
+  it("無題タブと内部的な閉じ直し(quitIfLast=false)は閉じたタブの履歴に残らない", async () => {
+    const { tabs } = await loadTabs();
+    tabs.newTab("/a/one.txt", "1");
+    await tabs.closeTab(0, null); // 無題タブ(パス無し)
+    await tabs.closeTab(0, null, false); // 文字コード指定で開き直す内部処理を想定
+    expect(tabs.popClosedTabPath()).toBe(null);
+  });
+
+  it("タブの中クリックで閉じるイベント、右クリックでメニューイベントが届く", async () => {
+    const { tabs } = await loadTabs();
+    tabs.newTab("/a/one.txt", "1");
+    const events = [];
+    const bar = document.getElementById("tabbar");
+    bar.addEventListener("tab-close-request", (e) => events.push(["close", e.detail]));
+    bar.addEventListener("tab-context-menu", (e) => events.push(["ctx", e.detail]));
+    const els = document.querySelectorAll("#tabbar .tab");
+    els[0].dispatchEvent(new MouseEvent("auxclick", { button: 1, bubbles: true }));
+    els[0].dispatchEvent(new MouseEvent("auxclick", { button: 2, bubbles: true })); // 右ボタンでは閉じない
+    els[1].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    expect(events).toEqual([
+      ["close", 0],
+      ["ctx", 1],
+    ]);
+  });
+
   it("closeTab: 未保存タブは確認で拒否されると閉じない", async () => {
     const { tabs } = await loadTabs();
     tabs.newTab("/a/one.txt", "1");

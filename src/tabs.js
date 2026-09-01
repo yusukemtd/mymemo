@@ -19,6 +19,9 @@ let activeIndex = -1;
 let view = null;
 let untitledCount = 0;
 let onLastTabClosed = null; // 最後のタブを閉じたときの処理(既定はアプリ終了)
+let dragIndex = null; // ドラッグ並べ替え中のタブの index(ドラッグ中でなければ null)
+const closedPaths = []; // 閉じたタブのパス(「閉じたタブを開き直す」用。新しいものが末尾)
+const CLOSED_PATHS_MAX = 20;
 
 const tabbarEl = document.getElementById("tabbar");
 
@@ -192,6 +195,22 @@ export function cycleTab(dir = 1) {
   activate((activeIndex + dir + tabs.length) % tabs.length);
 }
 
+// タブを並べ替える(ドラッグ&ドロップ)。from のタブを抜いて to の位置に挿す。
+// アクティブタブは位置が変わっても選択を保つ
+export function moveTab(from, to) {
+  if (from === to || !tabs[from] || !tabs[to]) return;
+  const active = tabs[activeIndex];
+  const [moved] = tabs.splice(from, 1);
+  tabs.splice(to, 0, moved);
+  activeIndex = tabs.indexOf(active);
+  render();
+}
+
+// 最後に閉じたタブのパスを取り出す(「ファイル > 閉じたタブを開き直す」。無ければ null)
+export function popClosedTabPath() {
+  return closedPaths.pop() ?? null;
+}
+
 // onConfirmClose: (tab) => Promise<boolean> — 未保存タブを閉じてよいか
 // quitIfLast: 最後のタブを閉じたらアプリを終了する(開き直し等の内部処理では false)
 export async function closeTab(index, onConfirmClose, quitIfLast = true) {
@@ -203,6 +222,12 @@ export async function closeTab(index, onConfirmClose, quitIfLast = true) {
   saveCurrentState();
   const wasActive = index === activeIndex;
   tabs.splice(index, 1);
+  // 「閉じたタブを開き直す」用にパスを覚える。quitIfLast=false は文字コード指定で
+  // 同じファイルをすぐ開き直す内部処理なので対象外
+  if (t.path && quitIfLast) {
+    closedPaths.push(t.path);
+    if (closedPaths.length > CLOSED_PATHS_MAX) closedPaths.shift();
+  }
   if (tabs.length === 0) {
     activeIndex = -1;
     if (quitIfLast) {
@@ -291,6 +316,41 @@ export function render() {
     el.appendChild(close);
 
     el.addEventListener("click", () => activate(i));
+
+    // 中クリックで閉じる(閉じるボタンと同じ確認フローに乗せる)
+    el.addEventListener("auxclick", (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      el.dispatchEvent(new CustomEvent("tab-close-request", { bubbles: true, detail: i }));
+    });
+
+    // 右クリックメニュー(メニュー自体は Rust 側のポップアップ。main.js が受けて出す)
+    el.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      el.dispatchEvent(new CustomEvent("tab-context-menu", { bubbles: true, detail: i }));
+    });
+
+    // ドラッグで並べ替え。ドロップ時に moveTab が再 render するため、
+    // dragIndex のリセットは drop 側でも行う(dragend は要素ごと消えて発火しないことがある)
+    el.draggable = true;
+    el.addEventListener("dragstart", (e) => {
+      dragIndex = i;
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+    });
+    el.addEventListener("dragover", (e) => {
+      if (dragIndex === null || dragIndex === i) return;
+      e.preventDefault(); // ドロップを受け付ける
+      el.classList.add("drop-target");
+    });
+    el.addEventListener("dragleave", () => el.classList.remove("drop-target"));
+    el.addEventListener("drop", (e) => {
+      e.preventDefault();
+      el.classList.remove("drop-target");
+      if (dragIndex !== null && dragIndex !== i) moveTab(dragIndex, i);
+      dragIndex = null;
+    });
+    el.addEventListener("dragend", () => (dragIndex = null));
+
     tabbarEl.insertBefore(el, newBtn);
   });
   window.dispatchEvent(new CustomEvent("active-tab-changed"));
