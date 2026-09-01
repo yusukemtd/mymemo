@@ -157,6 +157,26 @@ async function revertFile() {
   }
 }
 
+// 「ファイル > Finder で表示」: ファイルを Finder で選択した状態で表示する
+async function revealInFinder(tab) {
+  if (!tab?.path) return;
+  try {
+    await invoke("reveal_in_finder", { path: tab.path });
+  } catch (err) {
+    await message(String(err), { title: "mymemo", kind: "error" });
+  }
+}
+
+// 「ファイル > パスをコピー」: ファイルのフルパスをクリップボードへ
+async function copyPath(tab) {
+  if (!tab?.path) return;
+  try {
+    await navigator.clipboard.writeText(tab.path);
+  } catch (err) {
+    await message(`パスをコピーできませんでした: ${err}`, { title: "mymemo", kind: "error" });
+  }
+}
+
 async function saveFile(as = false) {
   const tab = Tabs.getActiveTab();
   if (!tab) return false;
@@ -384,6 +404,12 @@ listen("menu", async ({ payload }) => {
         Tabs.getTabs().indexOf(Tabs.getActiveTab()),
         confirmDiscard
       );
+      break;
+    case "reveal_in_finder":
+      await revealInFinder(Tabs.getActiveTab());
+      break;
+    case "copy_path":
+      await copyPath(Tabs.getActiveTab());
       break;
     case "find":
       openSearchPanel(view);

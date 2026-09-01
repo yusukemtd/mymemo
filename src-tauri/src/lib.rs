@@ -70,6 +70,30 @@ fn open_url(url: String) -> Result<(), String> {
         .map_err(|e| format!("ブラウザを開けませんでした: {e}"))
 }
 
+// Finder で表示できるのは実在する絶対パスだけ(`open -R` へのフラグ注入も絶対パス強制で防ぐ)
+fn validate_reveal_path(path: &str) -> Result<(), String> {
+    let p = std::path::Path::new(path);
+    if !p.is_absolute() {
+        return Err(format!("絶対パスではありません: {path}"));
+    }
+    if !p.exists() {
+        return Err(format!("ファイルが見つかりません: {path}"));
+    }
+    Ok(())
+}
+
+// 「ファイル > Finder で表示」・タブ右クリック: ファイルを Finder で選択した状態で表示する
+#[tauri::command]
+fn reveal_in_finder(path: String) -> Result<(), String> {
+    validate_reveal_path(&path)?;
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(&path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Finder を開けませんでした: {e}"))
+}
+
 // 「編集 > インデント」の CheckMenuItem ハンドル(タブ幅 2 / 4 / 8 とソフトタブ。チェック状態の同期用)
 struct IndentMenuItems {
     sizes: Vec<(u32, CheckMenuItem<tauri::Wry>)>,
@@ -247,6 +271,10 @@ pub fn run() {
                         .build(app)?,
                 )
                 .item(&MenuItemBuilder::with_id("revert", "保存済みの状態に戻す").build(app)?)
+                .separator()
+                // アクティブタブが対象。無題タブでは何もしない(フロント側で no-op)
+                .item(&MenuItemBuilder::with_id("reveal_in_finder", "Finder で表示").build(app)?)
+                .item(&MenuItemBuilder::with_id("copy_path", "パスをコピー").build(app)?)
                 .separator()
                 .item(
                     &MenuItemBuilder::with_id("close_tab", "タブを閉じる")
@@ -537,6 +565,7 @@ pub fn run() {
             set_indent,
             popup_status_menu,
             open_url,
+            reveal_in_finder,
             open_files::take_pending_open_files,
             grep::grep_search,
             grep::grep_replace,
@@ -570,6 +599,16 @@ mod tests {
         assert!(!is_openable_url("javascript:alert(1)"));
         assert!(!is_openable_url("/usr/bin/env"));
         assert!(!is_openable_url("-R"));
+    }
+
+    #[test]
+    fn validate_reveal_path_は実在する絶対パスだけ許す() {
+        use super::validate_reveal_path;
+        let f = tempfile::NamedTempFile::new().unwrap();
+        assert!(validate_reveal_path(f.path().to_str().unwrap()).is_ok());
+        assert!(validate_reveal_path("relative/a.txt").is_err());
+        assert!(validate_reveal_path("-R").is_err());
+        assert!(validate_reveal_path("/no/such/file/exists.txt").is_err());
     }
 
     #[test]
