@@ -325,8 +325,12 @@ async function jumpTo(path, lineNumber) {
   };
 }
 
-// grep の置換で書き換わったファイルは、ディスク上の変更検知と同じ経路で開いているタブへ反映する
-initGrep(jumpTo, { afterReplace: () => checkExternalChanges(externalDeps) });
+// grep の置換で書き換わったファイルは、ディスク上の変更検知と同じ経路で開いているタブへ反映する。
+// 検索フォルダの既定はアクティブタブのファイルの場所(grep.js 側で dirname にする)
+initGrep(jumpTo, {
+  afterReplace: () => checkExternalChanges(externalDeps),
+  activeFilePath: () => Tabs.getActiveTab()?.path ?? null,
+});
 
 // タブの閉じるボタン(中クリックも同じイベントで届く)
 document.getElementById("tabbar").addEventListener("tab-close-request", (e) => {

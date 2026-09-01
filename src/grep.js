@@ -16,6 +16,8 @@ const resultsEl = document.getElementById("grep-results");
 const closeBtn = document.getElementById("grep-close");
 
 let searchDir = null;
+let dirManuallySet = false; // 📁 でフォルダを選んだ後はアクティブファイルへの追従をやめる
+let getActiveFilePath = null; // () => アクティブタブのファイルパス(無題タブなら null)
 let onJump = null; // (path, lineNumber) => void
 let onReplaced = null; // 置換でファイルを書き換えた後に呼ぶ(開いているタブへの反映)
 
@@ -24,16 +26,23 @@ export function parseGlobs(value) {
   return value.split(/[\s,]+/).filter(Boolean);
 }
 
-export function initGrep(jumpHandler, { afterReplace = null } = {}) {
+// "/a/b/c.txt" → "/a/b"。ルート直下は "/"、パスが無い・区切りが無いときは null
+export function dirnameOf(path) {
+  const i = path ? path.lastIndexOf("/") : -1;
+  if (i < 0) return null;
+  return i === 0 ? "/" : path.slice(0, i);
+}
+
+export function initGrep(jumpHandler, { afterReplace = null, activeFilePath = null } = {}) {
   onJump = jumpHandler;
   onReplaced = afterReplace;
+  getActiveFilePath = activeFilePath;
 
   dirBtn.addEventListener("click", async () => {
     const dir = await open({ directory: true });
     if (dir) {
-      searchDir = dir;
-      dirLabel.textContent = dir;
-      dirLabel.title = dir;
+      dirManuallySet = true;
+      setSearchDir(dir);
     }
   });
 
@@ -65,8 +74,19 @@ function currentQuery() {
   };
 }
 
+function setSearchDir(dir) {
+  searchDir = dir;
+  dirLabel.textContent = dir;
+  dirLabel.title = dir;
+}
+
 export function toggleGrep() {
   if (panel.classList.contains("hidden")) {
+    // フォルダを選んでいなければ、アクティブなファイルの場所を既定にする(開くたびに追従)
+    if (!dirManuallySet) {
+      const dir = dirnameOf(getActiveFilePath?.());
+      if (dir) setSearchDir(dir);
+    }
     panel.classList.remove("hidden");
     input.focus();
     input.select();
