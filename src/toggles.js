@@ -98,7 +98,22 @@ export const markdownPreview = createToggle({
   defaultValue: false,
 });
 
+// 起動時のセッション復元(既定は ON)。変更しても即時の効果はなく、次回起動時に参照される
+export const restoreSessionOnStartup = createToggle({
+  id: "toggle_restore_session",
+  storageKey: "mymemo.restoreSession",
+  defaultValue: true,
+});
+
 // メニュー項目 ID → 設定
 export const TOGGLES = Object.fromEntries(
-  [showWhitespace, lineWrap, foldGutter, closeBrackets, wordCompletion, markdownPreview].map((t) => [t.id, t])
+  [
+    showWhitespace,
+    lineWrap,
+    foldGutter,
+    closeBrackets,
+    wordCompletion,
+    markdownPreview,
+    restoreSessionOnStartup,
+  ].map((t) => [t.id, t])
 );

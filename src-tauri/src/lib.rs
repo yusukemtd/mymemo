@@ -176,12 +176,20 @@ pub fn run() {
         .setup(|app| {
             let about = AboutMetadataBuilder::new().name(Some("mymemo")).build();
 
+            // 起動時のセッション復元の ON/OFF。checked は既定値で、起動直後に set_toggle で保存値に同期される
+            let restore_session_item =
+                CheckMenuItemBuilder::with_id("toggle_restore_session", "起動時に前回のタブを復元")
+                    .checked(true)
+                    .build(app)?;
+
             let app_menu = SubmenuBuilder::new(app, "mymemo")
                 .item(&PredefinedMenuItem::about(
                     app,
                     Some("mymemo について"),
                     Some(about),
                 )?)
+                .separator()
+                .item(&restore_session_item)
                 .separator()
                 .item(&PredefinedMenuItem::hide(app, Some("mymemo を隠す"))?)
                 .item(&PredefinedMenuItem::hide_others(app, Some("ほかを隠す"))?)
@@ -436,6 +444,11 @@ pub fn run() {
                     .accelerator("CmdOrCtrl+Shift+P")
                     .build(app)?;
             toggles.insert("toggle_preview".to_string(), preview_item.clone());
+            // アプリメニューの項目もチェック同期の対象にする(作成はメニュー構築順の都合で上の方)
+            toggles.insert(
+                "toggle_restore_session".to_string(),
+                restore_session_item.clone(),
+            );
             // 折りたたみのキーは CodeMirror の foldKeymap と同じ。言語が判定できたファイルでだけ効く
             let fold_menu = SubmenuBuilder::new(app, "折りたたみ")
                 .item(

@@ -18,8 +18,10 @@ import {
   closeBrackets,
   wordCompletion,
   markdownPreview,
+  restoreSessionOnStartup,
   TOGGLES,
 } from "./toggles.js";
+import { saveSession, scheduleSaveSession, restoreSession } from "./session.js";
 import { initPreview, schedulePreviewUpdate } from "./preview.js";
 import { foldCode, unfoldCode, foldAll, unfoldAll } from "@codemirror/language";
 import { initFontSize, zoomIn, zoomOut, resetFontSize } from "./fontsize.js";
@@ -31,7 +33,6 @@ import {
   syncIndentMenu,
 } from "./indent.js";
 import { initGrep, toggleGrep } from "./grep.js";
-import { saveSession, scheduleSaveSession, restoreSession } from "./session.js";
 import { checkExternalChanges, needsOverwriteConfirm, reloadTab } from "./external.js";
 import { applyLineTransform } from "./transform.js";
 import { MARKDOWN_COMMANDS } from "./markdown.js";
@@ -58,7 +59,7 @@ wordCompletion.init(); // 同上(初期 state の単語補完の有無が決ま�
 initIndent(); // 同上(判定できないファイルのインデント既定値が決まる)
 const container = document.getElementById("editor-container");
 const view = createView(container, createEditorState("", () => {}));
-// 起動時の無題タブはセッション復元の結果を見てから作る。最後のタブを閉じたときもセッションを保存してから終了する
+// 起動時の無題タブはセッション復元と起動時に渡されたファイルの有無を見てから作る(後述の open-files 処理)
 Tabs.initTabs(view, { initialTab: false, onLastTabClosed: quitApp });
 
 // --- Markdown プレビュー(表示 > Markdown プレビュー)。本文・タブの変化に追従する ---
@@ -67,12 +68,13 @@ markdownPreview.init();
 window.addEventListener("active-tab-changed", schedulePreviewUpdate);
 window.addEventListener("cursor-moved", schedulePreviewUpdate);
 
-// --- セッション復元(前回開いていたタブと無題タブの下書き)。復元するものが無ければ無題タブを 1 つ作る ---
-const restoring = restoreSession((path, encoding) =>
-  invoke("read_file", { path, encoding })
-).then(() => {
-  if (Tabs.getTabs().length === 0) Tabs.newTab();
-});
+// --- セッション復元(前回開いていたタブと無題タブの下書き)---
+// 「mymemo > 起動時に前回のタブを復元」が OFF なら復元せず、空の無題タブ
+// (起動時にファイルを渡されたらそのファイルだけ)で起動する
+restoreSessionOnStartup.init();
+const restoring = restoreSessionOnStartup.get()
+  ? restoreSession((path, encoding) => invoke("read_file", { path, encoding }))
+  : Promise.resolve(0);
 
 // --- ファイル操作 ---
 async function confirmDiscard(tab) {
@@ -252,7 +254,8 @@ statusEol.addEventListener("click", () => {
   );
 });
 
-// タブ・本文・カーソルが変わったらセッションを保存する(1 秒のデバウンス。終了直前にも保存する)
+// タブ・本文・カーソルが変わったらセッションを保存する(1 秒のデバウンス。終了直前にも保存する)。
+// 復元が OFF でも保存は続ける(ON に戻した次の起動で最新のセッションを復元できるように)
 window.addEventListener("active-tab-changed", scheduleSaveSession);
 window.addEventListener("cursor-moved", scheduleSaveSession);
 
@@ -444,6 +447,8 @@ restoring
   .then(() => invoke("take_pending_open_files"))
   .then(async (paths) => {
     for (const path of paths) await openFile(path);
+    // 復元したタブも起動時に渡されたファイルも無ければ、空の無題タブを 1 つ作る
+    if (Tabs.getTabs().length === 0) Tabs.newTab();
   });
 
 // --- フォントサイズ(「表示 > 拡大 / 縮小 / 標準サイズ」と Cmd+スクロール。保存値を復元) ---
@@ -474,10 +479,11 @@ async function quitApp() {
 }
 
 // 終了前の未保存確認(ウィンドウを閉じる操作と Cmd+Q の両方で使う)。
-// 無題タブの下書きはセッションとして保存され次回復元されるので確認対象から外す(保存に失敗したら対象に戻す)
+// 無題タブの下書きはセッションとして保存され次回復元されるので確認対象から外す
+// (保存に失敗した・復元を OFF にしているときは復元されないので対象に戻す)
 async function confirmQuit() {
-  const saved = saveSession();
-  const dirtyCount = Tabs.getTabs().filter((t) => t.dirty && (t.path || !saved)).length;
+  const restorable = saveSession() && restoreSessionOnStartup.get();
+  const dirtyCount = Tabs.getTabs().filter((t) => t.dirty && (t.path || !restorable)).length;
   if (dirtyCount === 0) return true;
   return confirm(
     `未保存のタブが ${dirtyCount} 個あります。変更を破棄して終了しますか?`,

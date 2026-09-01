@@ -79,4 +79,18 @@ describe("createToggle", () => {
     expect(toggles.showWhitespace.get()).toBe(true);
     expect(toggles.lineWrap.get()).toBe(false);
   });
+
+  it("起動時のセッション復元は既定 ON で、OFF が永続化される", async () => {
+    const { toggles } = await load();
+    expect(toggles.TOGGLES.toggle_restore_session).toBe(toggles.restoreSessionOnStartup);
+    toggles.restoreSessionOnStartup.init();
+    expect(toggles.restoreSessionOnStartup.get()).toBe(true);
+    toggles.restoreSessionOnStartup.toggle();
+    expect(store.get("mymemo.restoreSession")).toBe("0");
+
+    // 次回起動(再インポート)でも OFF が復元される
+    const second = await load();
+    second.toggles.restoreSessionOnStartup.init();
+    expect(second.toggles.restoreSessionOnStartup.get()).toBe(false);
+  });
 });
